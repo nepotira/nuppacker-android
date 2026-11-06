@@ -10,7 +10,7 @@ use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use jni::objects::{JClass, JObject, JString, JValue};
-use jni::sys::{jboolean, jint, jstring};
+use jni::sys::{jint, jstring};
 use jni::JNIEnv;
 
 use crate::discovery::{discover, guess_title_id, PackerConfig};
@@ -95,7 +95,7 @@ pub extern "system" fn Java_com_nepo_nuppacker_RustBridge_startBuild(
     };
 
     let jvm = match env.get_java_vm() {
-        Ok(vm) => vm,
+        Ok(vm) => Arc::new(vm),
         Err(e) => {
             notify_error(&mut env, &callback, &format!("Failed acquiring Java VM: {}", e));
             return -3;
@@ -110,7 +110,7 @@ pub extern "system" fn Java_com_nepo_nuppacker_RustBridge_startBuild(
         }
     };
 
-    let log_vm = jvm.clone();
+    let log_vm = Arc::clone(&jvm);
     let log_cb = callback_global.clone();
     let log_fn = move |msg: &str| {
         if let Ok(mut env) = log_vm.attach_current_thread() {
@@ -125,7 +125,7 @@ pub extern "system" fn Java_com_nepo_nuppacker_RustBridge_startBuild(
         }
     };
 
-    let prog_vm = jvm.clone();
+    let prog_vm = Arc::clone(&jvm);
     let prog_cb = callback_global.clone();
     let prog_fn = move |ratio: f32| {
         if let Ok(mut env) = prog_vm.attach_current_thread() {

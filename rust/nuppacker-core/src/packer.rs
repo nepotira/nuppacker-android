@@ -166,8 +166,6 @@ where
                 let compress_res = (|| -> Result<(usize, [u8; 32]), std::io::Error> {
                     let mut fin = File::open(&f.path)?;
                     let mut encoder = zstd::stream::write::Encoder::new(Vec::new(), zstd_level)?;
-                    // Enable multithreaded zstd compression if available
-                    let _ = encoder.include_magicbytes(true);
 
                     let mut compressed_len = 0usize;
                     let mut f_hasher = Sha256::new();
