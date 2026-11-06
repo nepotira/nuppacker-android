@@ -29,3 +29,7 @@ Cronológico, mais novo embaixo. Use o modelo da regra `30-documentacao`. Regist
 - **Sintoma**: Falha no build do CI na task `:app:installDebugPythonRequirements`.
 - **Causa**: O repositório de wheels do Chaquopy para Android fornece `zstandard==0.15.2` (compilado para arm64-v8a/x86_64), incompatível com a restrição estrita `>=0.25.0`.
 - **Solução**: Ajustado para `install("zstandard")` permitindo a utilização do wheel nativo pré-compilado do Chaquopy.
+
+## 2026-11-06 01:35 — Publicação da release v0.1.0
+- **Ramo**: `chore/release-0.1.0`
+- **Ações**: Fechamento do CHANGELOG para a versão `0.1.0`, criação da tag anotada `v0.1.0` e publicação da release no GitHub com o APK gerado e checksums SHA-256 anexados.

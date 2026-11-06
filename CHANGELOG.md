@@ -3,6 +3,8 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · Versiona
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-06
+
 ### Added
 - Native Android app with Jetpack Compose (Material 3) and direct storage access.
 - Embedded Chaquopy Python runtime preserving original `nuppacker` packaging logic.
@@ -11,3 +13,5 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · Versiona
 - Automated unit test suite verifying TOC alignment, TLV blocks, and Superblock.
 - GitHub Actions workflows for continuous integration and automated APK compilation.
 - Initial project structure with documentation and governance under AGPL-3.0.
+
+[0.1.0]: https://github.com/nepotira/nuppacker-android/releases/tag/v0.1.0
