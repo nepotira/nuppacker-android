@@ -70,3 +70,9 @@ Cronológico, mais novo embaixo. Use o modelo da regra `30-documentacao`. Regist
      - Adicionado listener de ciclo de vida (`ON_PAUSE`) para desmarcar o foco imediatamente ao minimizar ou sair do aplicativo, evitando reabertura automática do teclado ao retornar ao app.
      - Configurado `ImeAction.Done` e `keyboardActions` em todos os campos de texto de linha única.
 - **Evidência**: 7 testes unitários passando em 0.004s.
+
+## 2026-11-06 02:44 — Resolução de conflito de assinatura JVM e release v0.3.1
+- **Ramo**: `chore/release-0.3.1`
+- **Sintoma**: `Platform declaration clash: The following declarations have the same JVM signature (setIgnoreStorageWarning(Z)V)`.
+- **Causa**: O Kotlin gera automaticamente o método setter sintético no bytecode para a propriedade observável `ignoreStorageWarning`, gerando conflito com a declaração manual `fun setIgnoreStorageWarning`.
+- **Solução**: Renomeado o método para `updateIgnoreStorageWarning` e atualizado o `app/build.gradle.kts` para a versão `0.3.1`.
