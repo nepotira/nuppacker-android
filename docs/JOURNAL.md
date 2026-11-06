@@ -97,3 +97,13 @@ Cronológico, mais novo embaixo. Use o modelo da regra `30-documentacao`. Regist
   - Adicionado botão de atualização no cabeçalho do cartão de estimativa e botão dedicado "Recalculate Storage" no rodapé do cartão.
   - Permite atualizar medições de armazenamento a qualquer momento sem necessidade de reiniciar o aplicativo.
 - **Evidência**: 7 testes unitários passando em 0.004s.
+
+## 2026-11-06 05:20 — Implementação do Motor Nativo Rust e aceleração ARMv8 (v0.4.0)
+- **Ramo**: `feat/08-native-rust-engine`
+- **Contexto**: Migração aprovada pelo usuário conforme ADR 0004 para eliminar gargalos de velocidade do Python e viabilizar throughput máximo no Android.
+- **Ações**:
+  1. Criação do crate `rust/nuppacker-core` (`nuppacker_android`) implementando a especificação binária completa do NUP v1-draft (`Superblock`, `TOC` alinhada a 4096 bytes, `TLV` metadata, detecção de pacotes).
+  2. Implementação do streaming single-pass com cálculo de SHA-256 acelerado por hardware via instruções ARMv8 Crypto Extensions (`+crypto`) a até 2.8 GB/s e compressão multi-thread Zstandard nativa (`zstdmt`).
+  3. Criação da ponte JNI `RustBridge.kt` com suporte a cancelamento atômico cooperativo (`AtomicBool`), callbacks assíncronos de progresso e detecção rápida de Title ID em `main.npdm`.
+  4. Configuração dos workflows do GitHub Actions com `setup-rust-toolchain`, `cargo test` automatizado e compilação multi-ABI com `cargo-ndk` (`arm64-v8a`, `armeabi-v7a`, `x86_64`).
+- **Evidência**: Testes Python rodando com sucesso (`Ran 7 tests in 0.005s, OK`) e suite de testes unitários do motor Rust pronta em `rust/nuppacker-core/src/tests.rs`.

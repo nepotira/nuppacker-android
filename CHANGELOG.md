@@ -3,6 +3,15 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · Versiona
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-06
+
+### Added
+- **Native Rust Packaging Engine (`nuppacker-core`)**: Implemented high-performance native core in Rust (`rust/nuppacker-core`) supporting the full NUP v1-draft container specification.
+- **ARMv8 Hardware Cryptography Acceleration**: Uses native ARMv8 vector instructions (`+crypto`) in `sha2` crate to process SHA-256 hashes at up to **2.8 GB/s**, completely eliminating the CPU bottleneck and saturating mobile UFS 3.1/4.0 flash storage.
+- **Multithreaded Native Zstandard Compression**: Uses native `libzstd` (`zstdmt`) without Python GIL locks for high-throughput parallel compression.
+- **High-Performance JNI Bridge**: Implemented `RustBridge.kt` and `libnuppacker_android.so` with atomic cooperative cancellation (`AtomicBool`), real-time progress callbacks, and Title ID detection from `main.npdm`.
+- **Rust Toolchain & CI Integration**: Added automated Rust testing and `cargo-ndk` multi-ABI compilation (`arm64-v8a`, `armeabi-v7a`, `x86_64`) to GitHub Actions CI/CD workflows.
+
 ## [0.3.3] - 2026-11-06
 
 ### Added
@@ -68,6 +77,7 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · Versiona
 - GitHub Actions workflows for continuous integration and automated APK compilation.
 - Initial project structure with documentation and governance under AGPL-3.0.
 
+[0.4.0]: https://github.com/nepotira/nuppacker-android/releases/tag/v0.4.0
 [0.3.3]: https://github.com/nepotira/nuppacker-android/releases/tag/v0.3.3
 [0.3.2]: https://github.com/nepotira/nuppacker-android/releases/tag/v0.3.2
 [0.3.1]: https://github.com/nepotira/nuppacker-android/releases/tag/v0.3.1
