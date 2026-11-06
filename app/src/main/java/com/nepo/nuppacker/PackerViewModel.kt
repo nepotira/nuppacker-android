@@ -69,7 +69,7 @@ class PackerViewModel : ViewModel() {
     var ignoreStorageWarning by mutableStateOf(false)
         private set
 
-    fun setIgnoreStorageWarning(ignore: Boolean) {
+    fun updateIgnoreStorageWarning(ignore: Boolean) {
         ignoreStorageWarning = ignore
     }
 
