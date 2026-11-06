@@ -3,6 +3,12 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · Versiona
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-11-06
+
+### Fixed
+- **Rust Android Target Configuration**: Added explicit `rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android` in CI build workflow for `cargo-ndk`.
+- **Workspace Profiles**: Moved compiler optimization profiles (`opt-level = 3`, `lto = "thin"`) to the root workspace `Cargo.toml`.
+
 ## [0.4.1] - 2026-11-06
 
 ### Fixed
