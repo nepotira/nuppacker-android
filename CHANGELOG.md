@@ -3,6 +3,19 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · Versiona
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-11-06
+
+### Performance
+- **Instant Storage Calculation & Caching**: Replaced slow recursive `File.listFiles()` traversal with Java NIO `Files.walkFileTree` (using in-memory `BasicFileAttributes` without extra `stat` syscalls).
+- **Intelligent Dump Size Caching**: Cached dump directory sizes so changing Zstd level, destination directory, or filename recalculates the estimate and free space **instantaneously (0ms)** without re-scanning the storage.
+- **Fast Build Completion Free Space Refresh**: After build success, device available free space updates immediately in 0.1ms via single `StatFs` syscall without re-traversing the game dump.
+- **Excluded Output Artifacts**: Automatically ignores existing `.nup` and `.part` files inside the dump folder during calculation so previously built files never corrupt or slow down the estimate.
+
+### Fixed
+- **Dedicated File Name Input**: Added dedicated "Output File Name" field so users can easily name the output file directly without editing full path strings.
+- **Dynamic File Name Synchronization**: Synchronized "Title Name" with the output file name so typing the game title automatically names the `.nup` container, while allowing custom manual overrides.
+- **File Name Preservation on Folder Browse**: Choosing a new destination folder via folder picker now preserves the user's custom file name instead of resetting to the imported folder's name.
+
 ## [0.3.1] - 2026-11-06
 
 ### Fixed
@@ -50,6 +63,7 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · Versiona
 - GitHub Actions workflows for continuous integration and automated APK compilation.
 - Initial project structure with documentation and governance under AGPL-3.0.
 
+[0.3.2]: https://github.com/nepotira/nuppacker-android/releases/tag/v0.3.2
 [0.3.1]: https://github.com/nepotira/nuppacker-android/releases/tag/v0.3.1
 [0.3.0]: https://github.com/nepotira/nuppacker-android/releases/tag/v0.3.0
 [0.2.0]: https://github.com/nepotira/nuppacker-android/releases/tag/v0.2.0

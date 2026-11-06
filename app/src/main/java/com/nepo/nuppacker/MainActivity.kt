@@ -501,7 +501,7 @@ fun NUPPackerScreen(viewModel: PackerViewModel = viewModel()) {
                 }
             }
 
-            // Output Path Card (with Directory Browse Button)
+            // Output .nup Destination & File Name Card
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -510,17 +510,21 @@ fun NUPPackerScreen(viewModel: PackerViewModel = viewModel()) {
                         indication = null
                     ) { focusManager.clearFocus() }
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
                     Text(
-                        "Output .nup File",
+                        "Output .nup Destination & File Name",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold
                     )
-                    Spacer(modifier = Modifier.height(6.dp))
+
+                    // 1. Destination Folder Selector
                     OutlinedTextField(
-                        value = viewModel.outputPath,
-                        onValueChange = { viewModel.updateOutputPath(it) },
-                        label = { Text("Destination .nup path") },
+                        value = viewModel.outputDir,
+                        onValueChange = { viewModel.updateOutputDirectory(it) },
+                        label = { Text("Destination Folder") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
@@ -531,6 +535,40 @@ fun NUPPackerScreen(viewModel: PackerViewModel = viewModel()) {
                             }
                         }
                     )
+
+                    // 2. Output File Name Field (Directly editable)
+                    OutlinedTextField(
+                        value = viewModel.outputFileName,
+                        onValueChange = { viewModel.updateOutputFileName(it) },
+                        label = { Text("File Name (.nup)") },
+                        placeholder = { Text("e.g. Mario Kart World.nup") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() })
+                    )
+
+                    // 3. Full Resulting Path Preview
+                    if (viewModel.outputPath.isNotEmpty()) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(
+                                Icons.Default.Description,
+                                contentDescription = null,
+                                tint = SwitchBlue,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                "Target: ${viewModel.outputPath}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 2
+                            )
+                        }
+                    }
                 }
             }
 

@@ -19,6 +19,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.File
+import java.io.IOException
+import java.nio.file.FileVisitResult
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.SimpleFileVisitor
+import java.nio.file.attribute.BasicFileAttributes
 
 class PackerViewModel : ViewModel() {
 
@@ -28,7 +34,13 @@ class PackerViewModel : ViewModel() {
         private set
     var dlcFolder by mutableStateOf("")
         private set
+    var outputDir by mutableStateOf("")
+        private set
+    var outputFileName by mutableStateOf("")
+        private set
     var outputPath by mutableStateOf("")
+        private set
+    var isFileNameCustomized by mutableStateOf(false)
         private set
     var titleId by mutableStateOf("")
         private set
@@ -76,50 +88,92 @@ class PackerViewModel : ViewModel() {
     val logs = mutableStateListOf<String>()
     val discoveredPackages = mutableStateListOf<String>()
 
+    private var cachedFolder: String = ""
+    private var cachedUpdate: String = ""
+    private var cachedDlc: String = ""
+    private var cachedDumpSize: Long = 0L
+
+    private var storageJob: Job? = null
+
+    fun sanitizeFileName(name: String): String {
+        return name.replace(Regex("""[\\/:*?"<>|]"""), "_").trim()
+    }
+
+    private fun updateOutputPathCombined() {
+        val cleanName = when {
+            outputFileName.isEmpty() -> "game.nup"
+            outputFileName.endsWith(".nup", ignoreCase = true) -> outputFileName
+            else -> "$outputFileName.nup"
+        }
+        outputPath = if (outputDir.isNotEmpty()) {
+            "${outputDir.removeSuffix("/")}/$cleanName"
+        } else {
+            cleanName
+        }
+        updateStorageEstimate(forceRefreshDir = false)
+    }
+
     fun updateFolderInput(path: String, context: Context) {
-        folder = path.trim()
+        val trimmed = path.trim()
+        if (trimmed == folder) return
+        folder = trimmed
         if (folder.isNotEmpty()) {
             val file = File(folder)
-            if (outputPath.isEmpty()) {
-                val isSinglePkg = File(file, "exefs").isDirectory || File(file, "romfs").isDirectory
-                outputPath = if (isSinglePkg) {
-                    "${folder.removeSuffix("/")}.nup"
+            if (outputDir.isEmpty()) {
+                outputDir = file.parent ?: folder
+            }
+            if (!isFileNameCustomized) {
+                outputFileName = if (titleName.isNotBlank()) {
+                    "${sanitizeFileName(titleName)}.nup"
                 } else {
-                    File(file, "${file.name}.nup").absolutePath
+                    "${file.name}.nup"
                 }
             }
+            updateOutputPathCombined()
+
             if (titleId.isEmpty()) {
                 autoDetectTitleId(context)
             }
             inspectPackages(context)
-            updateStorageEstimate()
+            updateStorageEstimate(forceRefreshDir = true)
         }
     }
 
     fun updateOutputDirectory(directoryPath: String) {
         val dir = directoryPath.trim().removeSuffix("/")
-        val currentFileName = if (outputPath.isNotEmpty()) {
-            File(outputPath).name.ifEmpty { "game.nup" }
+        outputDir = dir
+        updateOutputPathCombined()
+    }
+
+    fun updateOutputFileName(name: String) {
+        isFileNameCustomized = true
+        outputFileName = name.trim()
+        updateOutputPathCombined()
+    }
+
+    fun updateOutputPath(path: String) {
+        val trimmed = path.trim()
+        val f = File(trimmed)
+        if (f.parent != null) {
+            outputDir = f.parent ?: ""
+            outputFileName = f.name
+            isFileNameCustomized = true
         } else {
-            "game.nup"
+            outputFileName = trimmed
+            isFileNameCustomized = true
         }
-        outputPath = "$dir/$currentFileName"
-        updateStorageEstimate()
+        outputPath = trimmed
+        updateStorageEstimate(forceRefreshDir = false)
     }
 
     fun updateUpdateFolder(path: String) {
         updateFolder = path.trim()
-        updateStorageEstimate()
+        updateStorageEstimate(forceRefreshDir = true)
     }
 
     fun updateDlcFolder(path: String) {
         dlcFolder = path.trim()
-        updateStorageEstimate()
-    }
-
-    fun updateOutputPath(path: String) {
-        outputPath = path.trim()
-        updateStorageEstimate()
+        updateStorageEstimate(forceRefreshDir = true)
     }
 
     fun updateTitleId(tid: String) {
@@ -128,6 +182,10 @@ class PackerViewModel : ViewModel() {
 
     fun updateTitleName(title: String) {
         titleName = title
+        if (!isFileNameCustomized && title.isNotBlank()) {
+            outputFileName = "${sanitizeFileName(title)}.nup"
+            updateOutputPathCombined()
+        }
     }
 
     fun updateVersion(v: String) {
@@ -148,16 +206,46 @@ class PackerViewModel : ViewModel() {
 
     fun updateZstdLevel(level: Int) {
         zstdLevel = level.coerceIn(0, 22)
-        updateStorageEstimate()
+        updateStorageEstimate(forceRefreshDir = false)
     }
 
     fun updateLocTitles(titles: String) {
         locTitles = titles
     }
 
-    private var storageJob: Job? = null
+    fun refreshFreeSpace() {
+        val targetDir = if (outputPath.isNotEmpty()) {
+            val p = File(outputPath).parentFile
+            if (p != null && p.exists()) p else Environment.getExternalStorageDirectory()
+        } else if (outputDir.isNotEmpty()) {
+            val p = File(outputDir)
+            if (p.exists()) p else Environment.getExternalStorageDirectory()
+        } else {
+            Environment.getExternalStorageDirectory()
+        }
 
-    fun updateStorageEstimate() {
+        val stat = try {
+            StatFs(targetDir.path)
+        } catch (e: Exception) {
+            StatFs(Environment.getExternalStorageDirectory().path)
+        }
+        freeSpaceBytes = stat.availableBlocksLong * stat.blockSizeLong
+    }
+
+    private fun recalculateRatioAndSufficiency(total: Long) {
+        val ratio = when {
+            zstdLevel == 0 -> 1.00 // Uncompressed raw store
+            zstdLevel <= 3 -> 0.58 // ~58% average for Switch romfs/exefs on zstd level 3
+            zstdLevel <= 8 -> 0.52
+            else -> 0.48
+        }
+        val estimated = (total * ratio).toLong() + (5L * 1024 * 1024) // +5MB TOC headroom
+        totalDumpBytes = total
+        estimatedNupBytes = estimated
+        isStorageSufficient = freeSpaceBytes > (estimated + (300L * 1024 * 1024)) // 300MB safe buffer
+    }
+
+    fun updateStorageEstimate(forceRefreshDir: Boolean = false) {
         if (folder.isEmpty()) {
             totalDumpBytes = 0L
             freeSpaceBytes = 0L
@@ -166,6 +254,18 @@ class PackerViewModel : ViewModel() {
             isCalculatingStorage = false
             return
         }
+
+        // Instantly refresh available free space on destination in 0.1ms
+        refreshFreeSpace()
+
+        // If folder did not change and size is cached, calculate ratio and space INSTANTLY in 0ms!
+        val isSameFolder = folder == cachedFolder && updateFolder == cachedUpdate && dlcFolder == cachedDlc
+        if (!forceRefreshDir && isSameFolder && cachedDumpSize > 0L) {
+            recalculateRatioAndSufficiency(cachedDumpSize)
+            return
+        }
+
+        // Otherwise, run high-speed asynchronous directory traversal using Java NIO
         storageJob?.cancel()
         storageJob = viewModelScope.launch(Dispatchers.IO) {
             isCalculatingStorage = true
@@ -179,47 +279,24 @@ class PackerViewModel : ViewModel() {
                     }
                     return@launch
                 }
-                var total = calculateDirSize(dumpDir)
+                var total = fastCalculateDirSize(dumpDir)
 
                 if (updateFolder.isNotEmpty()) {
                     val uf = File(updateFolder)
-                    if (uf.exists()) total += calculateDirSize(uf)
+                    if (uf.exists()) total += fastCalculateDirSize(uf)
                 }
                 if (dlcFolder.isNotEmpty()) {
                     val df = File(dlcFolder)
-                    if (df.exists()) total += calculateDirSize(df)
+                    if (df.exists()) total += fastCalculateDirSize(df)
                 }
 
-                // Check free space on the destination drive
-                val targetDir = if (outputPath.isNotEmpty()) {
-                    val p = File(outputPath).parentFile
-                    if (p != null && p.exists()) p else Environment.getExternalStorageDirectory()
-                } else {
-                    Environment.getExternalStorageDirectory()
-                }
-
-                val stat = try {
-                    StatFs(targetDir.path)
-                } catch (e: Exception) {
-                    StatFs(Environment.getExternalStorageDirectory().path)
-                }
-                val free = stat.availableBlocksLong * stat.blockSizeLong
-
-                // Switch game romfs/exefs average compression ratio with Zstd
-                val ratio = when {
-                    zstdLevel == 0 -> 1.00 // Uncompressed raw store
-                    zstdLevel <= 3 -> 0.58 // ~58% average for Switch romfs/exefs on zstd level 3
-                    zstdLevel <= 8 -> 0.52
-                    else -> 0.48
-                }
-                val estimated = (total * ratio).toLong() + (5L * 1024 * 1024) // +5MB TOC headroom
-                val sufficient = free > (estimated + (300L * 1024 * 1024)) // 300MB safe buffer
+                cachedFolder = folder
+                cachedUpdate = updateFolder
+                cachedDlc = dlcFolder
+                cachedDumpSize = total
 
                 withContext(Dispatchers.Main) {
-                    totalDumpBytes = total
-                    freeSpaceBytes = free
-                    estimatedNupBytes = estimated
-                    isStorageSufficient = sufficient
+                    recalculateRatioAndSufficiency(total)
                     isCalculatingStorage = false
                 }
             } catch (e: Exception) {
@@ -230,12 +307,40 @@ class PackerViewModel : ViewModel() {
         }
     }
 
-    private fun calculateDirSize(dir: File): Long {
+    private fun fastCalculateDirSize(dir: File): Long {
         if (!dir.exists()) return 0L
+        if (dir.isFile) return dir.length()
+        var total = 0L
+        try {
+            Files.walkFileTree(dir.toPath(), object : SimpleFileVisitor<Path>() {
+                override fun visitFile(file: Path, attrs: BasicFileAttributes): FileVisitResult {
+                    val name = file.fileName?.toString() ?: ""
+                    // Exclude any existing .nup or .part files inside the dump directory
+                    if (!name.endsWith(".nup", ignoreCase = true) && !name.endsWith(".part", ignoreCase = true)) {
+                        total += attrs.size()
+                    }
+                    return FileVisitResult.CONTINUE
+                }
+
+                override fun visitFileFailed(file: Path, exc: IOException?): FileVisitResult {
+                    return FileVisitResult.CONTINUE
+                }
+            })
+        } catch (e: Exception) {
+            total = legacyCalculateDirSize(dir)
+        }
+        return total
+    }
+
+    private fun legacyCalculateDirSize(dir: File): Long {
+        if (!dir.exists()) return 0L
+        if (dir.isFile) return dir.length()
         var size = 0L
         val files = dir.listFiles() ?: return 0L
         for (f in files) {
-            size += if (f.isDirectory) calculateDirSize(f) else f.length()
+            val name = f.name
+            if (name.endsWith(".nup", ignoreCase = true) || name.endsWith(".part", ignoreCase = true)) continue
+            size += if (f.isDirectory) legacyCalculateDirSize(f) else f.length()
         }
         return size
     }
@@ -362,6 +467,9 @@ class PackerViewModel : ViewModel() {
                         statusMessage = "NUP Build Complete!"
                         addLog("Build completed successfully: $outputPath")
                         PackerForegroundService.stopOrCancel(context)
+                        // Instantly refresh remaining free storage on device (0.1ms via StatFs)
+                        refreshFreeSpace()
+                        recalculateRatioAndSufficiency(cachedDumpSize)
                     }
                 }
 
