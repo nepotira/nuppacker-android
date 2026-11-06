@@ -4,7 +4,8 @@ A native Android application to pack Nintendo Switch 1 and Switch 2 dumps into `
 
 Based on [PastaLaPate/NUPPacker](https://github.com/PastaLaPate/NUPPacker) and the [NUP container specification](https://github.com/a55uka/nup).
 
-![status](https://img.shields.io/badge/status-in%20development-yellow)
+![status](https://img.shields.io/badge/status-stable-brightgreen)
+![version](https://img.shields.io/badge/version-v0.1.0-blue)
 ![license](https://img.shields.io/badge/license-AGPL--3.0-blue)
 ![platform](https://img.shields.io/badge/platform-Android%208.0+-green)
 
