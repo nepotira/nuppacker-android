@@ -153,3 +153,11 @@ Cronológico, mais novo embaixo. Use o modelo da regra `30-documentacao`. Regist
   5. **Bumping de Versão**:
      - Atualizado para SemVer `0.5.0` (versionCode 11).
 - **Evidência**: Testes unitários Rust adicionados (`test_incompressible_ext`, `test_entropy_probe`, `test_analyze_folder`) e testes Python validados.
+
+## 2026-11-06 06:44 — Publicação da Release v0.5.0 no GitHub
+- **Ações**:
+  - Compilação no GitHub Actions (Run ID `42196609545`) concluída com sucesso gerando o APK universal multi-ABI e checksums.
+  - Upload e publicação oficial da release `v0.5.0` no repositório GitHub com notas detalhadas das otimizações arquiteturais.
+- **Evidência**:
+  - Release: `https://github.com/nepotira/nuppacker-android/releases/tag/v0.5.0`
+  - SHA-256 (`app-debug.apk`): `7b63e24e4228bed90ffa56ebca7ff36eb4eb4dca4e94adbf0e1f47467243d779`
