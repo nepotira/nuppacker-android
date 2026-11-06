@@ -3,6 +3,11 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · Versiona
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-11-06
+
+### Added
+- **Manual Recalculate Storage Button**: Added a dedicated refresh icon in the card header and a "Recalculate Storage" button at the bottom of the Storage Card, allowing users to force a fresh recalculation of dump size and available storage on demand without having to close and reopen the app.
+
 ## [0.3.2] - 2026-11-06
 
 ### Performance
@@ -63,6 +68,7 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · Versiona
 - GitHub Actions workflows for continuous integration and automated APK compilation.
 - Initial project structure with documentation and governance under AGPL-3.0.
 
+[0.3.3]: https://github.com/nepotira/nuppacker-android/releases/tag/v0.3.3
 [0.3.2]: https://github.com/nepotira/nuppacker-android/releases/tag/v0.3.2
 [0.3.1]: https://github.com/nepotira/nuppacker-android/releases/tag/v0.3.1
 [0.3.0]: https://github.com/nepotira/nuppacker-android/releases/tag/v0.3.0
