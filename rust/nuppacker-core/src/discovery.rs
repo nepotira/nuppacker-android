@@ -433,41 +433,49 @@ pub fn analyze_folder(folder: &Path) -> FolderAnalysis {
         title_id = direct_tid;
     }
 
-    for entry in walkdir::WalkDir::new(folder)
-        .min_depth(1)
-        .into_iter()
-        .filter_entry(|e| {
-            let name = e.file_name().to_string_lossy();
-            !name.ends_with(".nup") && !name.ends_with(".part") && !name.starts_with('.')
-        })
-        .filter_map(|e| e.ok())
-    {
-        if entry.file_type().is_file() {
-            let name = entry.file_name().to_string_lossy();
-            if !name.ends_with(".nup") && !name.ends_with(".part") {
-                if let Ok(meta) = entry.metadata() {
-                    total_bytes += meta.len();
-                    file_count += 1;
-                }
-            }
-        }
-    }
-
     let specs = discover(folder);
     let mut packages = Vec::new();
     let kind_names = ["base", "update", "dlc"];
-    for (kind, _tid, ver, p) in specs {
+    for (kind, _tid, ver, p) in &specs {
         if title_id.is_empty() {
-            let tid = guess_title_id(&p);
+            let tid = guess_title_id(p);
             if !tid.is_empty() {
                 title_id = tid;
             }
         }
         packages.push(DiscoveredPackage {
-            kind: kind_names.get(kind as usize).unwrap_or(&"unknown").to_string(),
+            kind: kind_names.get(*kind as usize).unwrap_or(&"unknown").to_string(),
             version: ver.map(ver_str).unwrap_or_else(|| "0".to_string()),
             path: p.to_string_lossy().to_string(),
         });
+    }
+
+    let roots: Vec<PathBuf> = if !specs.is_empty() {
+        specs.into_iter().map(|s| s.3).collect()
+    } else {
+        vec![folder.to_path_buf()]
+    };
+
+    for root in roots {
+        for entry in walkdir::WalkDir::new(&root)
+            .min_depth(1)
+            .into_iter()
+            .filter_entry(|e| {
+                let name = e.file_name().to_string_lossy();
+                !name.ends_with(".nup") && !name.ends_with(".part") && !name.starts_with('.')
+            })
+            .filter_map(|e| e.ok())
+        {
+            if entry.file_type().is_file() {
+                let name = entry.file_name().to_string_lossy();
+                if !name.ends_with(".nup") && !name.ends_with(".part") {
+                    if let Ok(meta) = entry.metadata() {
+                        total_bytes += meta.len();
+                        file_count += 1;
+                    }
+                }
+            }
+        }
     }
 
     FolderAnalysis {

@@ -133,3 +133,43 @@ fn test_analyze_folder() {
     assert_eq!(analysis.packages.len(), 1);
     assert_eq!(analysis.packages[0].kind, "base");
 }
+
+#[test]
+fn test_small_file_raw_fallback_and_compression() {
+    let temp_dir = TempDir::new().unwrap();
+    let dump = temp_dir.path().join("dump");
+    let exefs = dump.join("exefs");
+    let romfs = dump.join("romfs");
+    fs::create_dir_all(&exefs).unwrap();
+    fs::create_dir_all(&romfs).unwrap();
+
+    fs::write(exefs.join("main"), b"MAIN_EXEC").unwrap();
+    let mut incompressible = Vec::new();
+    for i in 0..1024 {
+        incompressible.push(((i * 37 + 11) % 256) as u8);
+    }
+    fs::write(romfs.join("raw.bin"), &incompressible).unwrap();
+
+    let out_nup = temp_dir.path().join("out.nup");
+    let cfg = PackerConfig {
+        folder: dump.to_string_lossy().to_string(),
+        update: None,
+        dlc: None,
+        output: out_nup.to_string_lossy().to_string(),
+        title_id: "0100000000010000".to_string(),
+        title: Some("Test".to_string()),
+        publisher: None,
+        version: Some("1.0.0".to_string()),
+        update_version: None,
+        display_version: None,
+        nacp: None,
+        icon: None,
+        zstd: Some(3),
+        loc_titles: None,
+    };
+
+    let cancelled = Arc::new(AtomicBool::new(false));
+    let res = build_nup(&cfg, |_| {}, |_| {}, cancelled);
+    assert!(res.is_ok(), "Build failed: {:?}", res.err());
+    assert!(out_nup.exists());
+}

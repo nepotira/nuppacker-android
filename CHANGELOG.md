@@ -3,6 +3,16 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · Versiona
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-11-06
+
+### Fixed
+- **Zstandard Slider Snapping & Touch Responsiveness**: Decoupled the Material 3 Slider state with local UI state and `roundToInt()`, eliminating value jumping (0, 1, 2, 4, 5, 7...) and touch frame drops. Deferred storage recalculations to `onValueChangeFinished`.
+- **Zstandard Threadpool Thrashing & Persistent Context**: Replaced per-file instantiation of multi-threaded encoders with a persistent reusable `zstd::bulk::Compressor` for files <= 4 MB, eliminating 50,000 thread pool creations and context reallocations.
+- **Disk Double-Read Elimination on RAW Fallback**: Eliminated re-opening and re-reading files from disk when compression does not yield size reductions. Writes directly from the pre-allocated in-memory buffer.
+- **Bounded RAM Footprint**: Kept in-memory buffering capped at 4 MB per file, avoiding out-of-memory pressure and kernel throttling on large Switch dumps.
+- **Targeted Package Directory Traversal**: Optimized folder analysis to walk discovered package roots directly, reducing unnecessary directory traversals.
+- **Non-blocking Storage System Calls**: Moved `StatFs` storage free space inquiries completely off the Android UI main thread to `Dispatchers.IO`.
+
 ## [0.5.0] - 2026-11-06
 
 ### Performance

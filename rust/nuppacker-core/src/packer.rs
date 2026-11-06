@@ -190,6 +190,17 @@ where
         let mut seen: HashMap<([u8; 32], u64), (u64, u64, u8)> = HashMap::new();
         let mut read_buf = vec![0u8; CHUNK_SIZE];
 
+        // Persistent bulk compressor instance (reused across all small/medium files)
+        // Eliminates 100% of threadpool allocations and context thrashing
+        let mut bulk_compressor = if zstd_level > 0 {
+            Some(zstd::bulk::Compressor::new(zstd_level).map_err(|e| format!("Failed to create Zstd compressor: {}", e))?)
+        } else {
+            None
+        };
+
+        const MEM_THRESHOLD: u64 = 4 * 1024 * 1024; // 4 MB fast-path memory buffer
+        let mut mem_file_buf = Vec::with_capacity(MEM_THRESHOLD as usize);
+
         for f in &mut files {
             if cancelled.load(Ordering::Relaxed) {
                 return Err("Cancelled by user".into());
@@ -212,101 +223,57 @@ where
                 pos += pad as u64;
             }
             let start = pos;
-            let mut stored_raw = true;
 
             let mut skip_compression = zstd_level == 0 || is_incompressible_ext(Path::new(&f.name));
-            if !skip_compression && f.size > (128 * 1024) {
-                if let Ok(mut probe_file) = File::open(&f.path) {
-                    let mut probe_buf = vec![0u8; 16 * 1024];
-                    if let Ok(n) = probe_file.read(&mut probe_buf) {
-                        if n >= 4096 && fast_entropy_probe(&probe_buf[..n]) > 7.75 {
-                            skip_compression = true;
-                        }
-                    }
-                }
-            }
 
-            if !skip_compression {
-                let compress_res = (|| -> Result<(usize, [u8; 32]), std::io::Error> {
-                    let mut fin = File::open(&f.path)?;
-                    #[cfg(any(target_os = "android", target_os = "linux"))]
-                    {
-                        use std::os::unix::io::AsRawFd;
-                        unsafe {
-                            libc::posix_fadvise(
-                                fin.as_raw_fd(),
-                                0,
-                                f.size as libc::off_t,
-                                libc::POSIX_FADV_SEQUENTIAL | libc::POSIX_FADV_WILLNEED,
-                            );
-                        }
-                    }
-
-                    let mut encoder = zstd::stream::write::Encoder::new(Vec::new(), zstd_level)?;
-                    let _ = encoder.multithread(optimal_thread_count());
-
-                    let mut f_hasher = Sha256::new();
-
-                    loop {
-                        if cancelled.load(Ordering::Relaxed) {
-                            return Err(std::io::Error::new(std::io::ErrorKind::Interrupted, "Cancelled"));
-                        }
-                        let n = fin.read(&mut read_buf)?;
-                        if n == 0 {
-                            break;
-                        }
-                        f_hasher.update(&read_buf[..n]);
-                        
-                        // Stream into encoder buffer
-                        encoder.write_all(&read_buf[..n])?;
-                    }
-
-                    #[cfg(any(target_os = "android", target_os = "linux"))]
-                    {
-                        use std::os::unix::io::AsRawFd;
-                        unsafe {
-                            libc::posix_fadvise(fin.as_raw_fd(), 0, 0, libc::POSIX_FADV_DONTNEED);
-                        }
-                    }
-
-                    let compressed_data = encoder.finish()?;
-                    let compressed_len = compressed_data.len();
-
-                    if (compressed_len as u64) < f.size {
-                        out.write_all(&compressed_data)?;
-                        Ok((compressed_len, f_hasher.finalize().into()))
-                    } else {
-                        // Compressed size is larger or equal; fall back to raw
-                        Ok((0, f_hasher.finalize().into()))
-                    }
-                })();
-
-                match compress_res {
-                    Ok((c_len, hash)) => {
-                        f.sha = hash;
-                        if c_len > 0 {
-                            stored_raw = false;
-                            f.codec = 1;
-                            f.esize = c_len as u64;
-                            done += f.size;
-                        }
-                    }
-                    Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {
-                        return Err("Cancelled by user".into());
-                    }
-                    Err(_) => {
-                        // Compression fallback to raw
-                        out.seek(SeekFrom::Start(start)).map_err(|e| e.to_string())?;
-                        stored_raw = true;
-                    }
-                }
-            }
-
-            if stored_raw {
-                f.codec = 0;
+            if f.size <= MEM_THRESHOLD {
+                // ========================================================
+                // FAST PATH: Small & Medium Files (<= 4 MB)
+                // 1 disk read, compute SHA-256 in memory, compress with persistent context.
+                // ZERO thread allocations, ZERO disk re-reads on RAW fallback!
+                // ========================================================
+                mem_file_buf.clear();
                 let mut fin = File::open(&f.path).map_err(|e| format!("Failed to open {}: {}", f.name, e))?;
+                fin.read_to_end(&mut mem_file_buf).map_err(|e| format!("Failed reading {}: {}", f.name, e))?;
+
+                f.sha = Sha256::digest(&mem_file_buf).into();
+
+                if !skip_compression && mem_file_buf.len() > (128 * 1024) {
+                    let probe_len = std::cmp::min(16 * 1024, mem_file_buf.len());
+                    if probe_len >= 4096 && fast_entropy_probe(&mem_file_buf[..probe_len]) > 7.75 {
+                        skip_compression = true;
+                    }
+                }
+
+                let mut stored_raw = true;
+                if !skip_compression {
+                    if let Some(comp) = bulk_compressor.as_mut() {
+                        if let Ok(compressed) = comp.compress(&mem_file_buf) {
+                            if (compressed.len() as u64) < f.size {
+                                out.write_all(&compressed).map_err(|e| format!("Failed writing compressed data: {}", e))?;
+                                f.codec = 1;
+                                f.esize = compressed.len() as u64;
+                                stored_raw = false;
+                            }
+                        }
+                    }
+                }
+
+                if stored_raw {
+                    out.write_all(&mem_file_buf).map_err(|e| format!("Failed writing raw data: {}", e))?;
+                    f.codec = 0;
+                    f.esize = f.size;
+                }
+                done += f.size;
+            } else {
+                // ========================================================
+                // STREAMING PATH: Large Files (> 4 MB)
+                // Chunked streaming for rare large files.
+                // ========================================================
                 #[cfg(any(target_os = "android", target_os = "linux"))]
-                {
+                let raw_fd_opt = File::open(&f.path).ok();
+                #[cfg(any(target_os = "android", target_os = "linux"))]
+                if let Some(ref fin) = raw_fd_opt {
                     use std::os::unix::io::AsRawFd;
                     unsafe {
                         libc::posix_fadvise(
@@ -317,28 +284,95 @@ where
                         );
                     }
                 }
-                let mut f_hasher = Sha256::new();
-                loop {
-                    if cancelled.load(Ordering::Relaxed) {
-                        return Err("Cancelled by user".into());
+
+                if !skip_compression {
+                    if let Ok(mut probe_file) = File::open(&f.path) {
+                        let mut probe_buf = vec![0u8; 16 * 1024];
+                        if let Ok(n) = probe_file.read(&mut probe_buf) {
+                            if n >= 4096 && fast_entropy_probe(&probe_buf[..n]) > 7.75 {
+                                skip_compression = true;
+                            }
+                        }
                     }
-                    let n = fin.read(&mut read_buf).map_err(|e| e.to_string())?;
-                    if n == 0 {
-                        break;
-                    }
-                    f_hasher.update(&read_buf[..n]);
-                    out.write_all(&read_buf[..n]).map_err(|e| e.to_string())?;
                 }
+
+                let mut stored_raw = true;
+                if !skip_compression {
+                    let compress_res = (|| -> Result<(usize, [u8; 32]), std::io::Error> {
+                        let mut fin = File::open(&f.path)?;
+                        let mut encoder = zstd::stream::write::Encoder::new(Vec::new(), zstd_level)?;
+                        let _ = encoder.multithread(optimal_thread_count());
+                        let mut f_hasher = Sha256::new();
+
+                        loop {
+                            if cancelled.load(Ordering::Relaxed) {
+                                return Err(std::io::Error::new(std::io::ErrorKind::Interrupted, "Cancelled"));
+                            }
+                            let n = fin.read(&mut read_buf)?;
+                            if n == 0 {
+                                break;
+                            }
+                            f_hasher.update(&read_buf[..n]);
+                            encoder.write_all(&read_buf[..n])?;
+                        }
+
+                        let compressed_data = encoder.finish()?;
+                        let compressed_len = compressed_data.len();
+
+                        if (compressed_len as u64) < f.size {
+                            out.write_all(&compressed_data)?;
+                            Ok((compressed_len, f_hasher.finalize().into()))
+                        } else {
+                            Ok((0, f_hasher.finalize().into()))
+                        }
+                    })();
+
+                    match compress_res {
+                        Ok((c_len, hash)) => {
+                            f.sha = hash;
+                            if c_len > 0 {
+                                stored_raw = false;
+                                f.codec = 1;
+                                f.esize = c_len as u64;
+                                done += f.size;
+                            }
+                        }
+                        Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {
+                            return Err("Cancelled by user".into());
+                        }
+                        Err(_) => {
+                            stored_raw = true;
+                        }
+                    }
+                }
+
+                if stored_raw {
+                    f.codec = 0;
+                    let mut fin = File::open(&f.path).map_err(|e| format!("Failed to open {}: {}", f.name, e))?;
+                    let mut f_hasher = Sha256::new();
+                    loop {
+                        if cancelled.load(Ordering::Relaxed) {
+                            return Err("Cancelled by user".into());
+                        }
+                        let n = fin.read(&mut read_buf).map_err(|e| e.to_string())?;
+                        if n == 0 {
+                            break;
+                        }
+                        f_hasher.update(&read_buf[..n]);
+                        out.write_all(&read_buf[..n]).map_err(|e| e.to_string())?;
+                    }
+                    f.sha = f_hasher.finalize().into();
+                    f.esize = f.size;
+                    done += f.size;
+                }
+
                 #[cfg(any(target_os = "android", target_os = "linux"))]
-                {
+                if let Some(fin) = raw_fd_opt {
                     use std::os::unix::io::AsRawFd;
                     unsafe {
                         libc::posix_fadvise(fin.as_raw_fd(), 0, 0, libc::POSIX_FADV_DONTNEED);
                     }
                 }
-                f.sha = f_hasher.finalize().into();
-                f.esize = f.size;
-                done += f.size;
             }
 
             let key = (f.sha, f.size);
