@@ -644,7 +644,7 @@ fun NUPPackerScreen(viewModel: PackerViewModel = viewModel()) {
                                 ) {
                                     Checkbox(
                                         checked = viewModel.ignoreStorageWarning,
-                                        onCheckedChange = { viewModel.setIgnoreStorageWarning(it) }
+                                        onCheckedChange = { viewModel.updateIgnoreStorageWarning(it) }
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text(
