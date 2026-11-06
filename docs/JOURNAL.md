@@ -107,3 +107,17 @@ Cronológico, mais novo embaixo. Use o modelo da regra `30-documentacao`. Regist
   3. Criação da ponte JNI `RustBridge.kt` com suporte a cancelamento atômico cooperativo (`AtomicBool`), callbacks assíncronos de progresso e detecção rápida de Title ID em `main.npdm`.
   4. Configuração dos workflows do GitHub Actions com `setup-rust-toolchain`, `cargo test` automatizado e compilação multi-ABI com `cargo-ndk` (`arm64-v8a`, `armeabi-v7a`, `x86_64`).
 - **Evidência**: Testes Python rodando com sucesso (`Ran 7 tests in 0.005s, OK`) e suite de testes unitários do motor Rust pronta em `rust/nuppacker-core/src/tests.rs`.
+
+## 2026-11-06 05:25 — Correção de compilação do motor Rust e workspace Cargo (v0.4.1)
+- **Ramo**: `fix/09-rust-core-compile-fixes`
+- **Sintomas**:
+  1. `actions-rust-lang/setup-rust-toolchain` falhou ao salvar cache por não encontrar `Cargo.toml` na raiz.
+  2. Erro `no method named include_magicbytes found for struct zstd::Encoder`.
+  3. Erro `no method named clone found for struct JavaVM`.
+  4. Avisos `-D warnings` por imports e mutabilidade não utilizados.
+- **Soluções**:
+  1. Criação do `Cargo.toml` com workspace na raiz do repositório.
+  2. Remoção da chamada desnecessária `include_magicbytes`.
+  3. Encapsulamento de `JavaVM` em `Arc<JavaVM>` para clonagem entre threads de log e progresso.
+  4. Limpeza de warnings e bumping para `0.4.1` (versionCode 9) respeitando o princípio de imutabilidade do SemVer.
+- **Evidência**: Testes locais Python passando e build acionado no GitHub Actions.

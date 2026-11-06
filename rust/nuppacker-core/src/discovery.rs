@@ -350,8 +350,8 @@ where
         }
 
         let mut root = Dir::new(path.file_name().and_then(|f| f.to_str()).unwrap_or("pkg"));
-        let mut exefs_idx = NO_DIR;
-        let mut romfs_idx = NO_DIR;
+        let exefs_idx = NO_DIR;
+        let romfs_idx = NO_DIR;
 
         let exefs_path = path.join("exefs");
         if exefs_path.is_dir() {

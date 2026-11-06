@@ -3,6 +3,15 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · Versiona
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-11-06
+
+### Fixed
+- **Rust Core Compilation**:
+  - Wrapped `JavaVM` in `Arc` for thread-safe multi-threaded callbacks from Rust to Kotlin.
+  - Removed deprecated/non-existent `include_magicbytes` call in `zstd::stream::write::Encoder`.
+  - Removed unused `jboolean` import and unused mutable variables (`exefs_idx`, `romfs_idx`).
+  - Added root `Cargo.toml` workspace so `setup-rust-toolchain` and cargo caching discover all crate metadata seamlessly.
+
 ## [0.4.0] - 2026-11-06
 
 ### Added
