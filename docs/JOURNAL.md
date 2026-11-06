@@ -121,3 +121,14 @@ Cronológico, mais novo embaixo. Use o modelo da regra `30-documentacao`. Regist
   3. Encapsulamento de `JavaVM` em `Arc<JavaVM>` para clonagem entre threads de log e progresso.
   4. Limpeza de warnings e bumping para `0.4.1` (versionCode 9) respeitando o princípio de imutabilidade do SemVer.
 - **Evidência**: Testes locais Python passando e build acionado no GitHub Actions.
+
+## 2026-11-06 05:32 — Adição explícita de alvos Android no Rust e perfis no workspace (v0.4.2)
+- **Ramo**: `fix/10-rust-android-targets-and-workspace-profiles`
+- **Sintomas**:
+  1. `cargo-ndk` falhou no CI com `can't find crate for core` pois o target `aarch64-linux-android` não havia sido instalado via `setup-rust-toolchain`.
+  2. Cargo alertou que `[profile.release]` deve residir no workspace raiz e não em pacotes filhos.
+- **Soluções**:
+  1. Adicionado comando explícito `rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android` no workflow `build.yml`.
+  2. Movido o bloco `[profile.release]` para o `Cargo.toml` raiz.
+  3. Atualizada a versão para `0.4.2` (versionCode 10).
+- **Evidência**: Testes Rust e Python validados e build acionado no GitHub Actions.
