@@ -1,0 +1,46 @@
+# Segredos e ambiente
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.jks
+*.keystore
+secrets/
+
+# Android & Gradle
+.gradle/
+build/
+app/build/
+local.properties
+*.apk
+*.ap_
+*.aab
+*.dex
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.venv/
+env/
+venv/
+ENV/
+
+# Sistema e editores
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.iml
+
+# Logs, dumps e binários grandes
+*.log
+*.nup
+*.nup.part
+*.part
+*.bak
+
+# Mantém pastas vazias importantes
+!docs/handoffs/.gitkeep

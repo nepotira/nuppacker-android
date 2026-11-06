@@ -1,0 +1,3 @@
+# Glossário
+| Termo | Significado | Observação |
+|---|---|---|

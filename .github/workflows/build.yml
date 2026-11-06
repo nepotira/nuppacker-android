@@ -1,0 +1,30 @@
+name: Build
+on:
+  workflow_dispatch:
+    inputs:
+      alvo:
+        description: "O que construir (ajuste ao projeto)"
+        required: false
+        default: "padrao"
+  push:
+    tags: ["v*"]
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest        # para ARM, trocar pelo rótulo atual de runner ARM do GitHub (repos públicos)
+    timeout-minutes: 350          # limite de 6 h por job nos runners hospedados
+    steps:
+      - uses: actions/checkout@v4
+      # TODO: preparar a stack (node/php/python/toolchain) e cache
+      - name: Construir
+        run: |
+          echo "defina o comando de build do AGENTS.md (alvo=${{ inputs.alvo }})"
+          mkdir -p dist && echo "exemplo" > dist/exemplo.txt
+      - name: Checksums
+        run: cd dist && sha256sum * > SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ github.sha }}
+          path: dist/
+          if-no-files-found: error

@@ -1,0 +1,8 @@
+# tipo(escopo)!: short English description in the imperative (up to 72 characters)
+# tipos: feat fix docs style refactor perf test build ci chore revert
+#
+# Corpo: por quê, não o quê.
+#
+# Refs: #
+# BREAKING CHANGE:
+# Assisted-by:
