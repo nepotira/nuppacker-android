@@ -76,3 +76,16 @@ Cronológico, mais novo embaixo. Use o modelo da regra `30-documentacao`. Regist
 - **Sintoma**: `Platform declaration clash: The following declarations have the same JVM signature (setIgnoreStorageWarning(Z)V)`.
 - **Causa**: O Kotlin gera automaticamente o método setter sintético no bytecode para a propriedade observável `ignoreStorageWarning`, gerando conflito com a declaração manual `fun setIgnoreStorageWarning`.
 - **Solução**: Renomeado o método para `updateIgnoreStorageWarning` e atualizado o `app/build.gradle.kts` para a versão `0.3.1`.
+
+## 2026-11-06 04:45 — Otimização instantânea do cálculo de espaço e correção do nome do arquivo (v0.3.2)
+- **Ramo**: `fix/06-fast-storage-calc-and-filename-fix`
+- **Sintomas**:
+  1. Cálculo de tamanho e espaço disponível demorando excessivamente ao carregar ou após o build do NUP.
+  2. Inserção de nome de arquivo não surtindo efeito, permanecendo o nome da pasta importada.
+- **Causas**:
+  1. `calculateDirSize` utilizava `File.listFiles()` recursivo sem cache, disparando varreduras de disco completas em cada alteração de slider ou caminho. Além disso, incluía no cálculo arquivos `.nup` gerados na pasta de dump e reexecutava varredura no término do build.
+  2. O formulário de saída possuía apenas um campo com o caminho completo absoluto; a seleção de diretório sobrescrevia o nome com a pasta original e a edição do campo "Title Name" não sincronizava com o nome do arquivo final.
+- **Soluções**:
+  1. **Cálculo Instantâneo**: Implementado cache em memória para o tamanho do dump; alterações de slider, destino ou nome recalculam o tamanho estimado em 0ms. Substituição de `File.listFiles()` por Java NIO `Files.walkFileTree` com `BasicFileAttributes` (evitando syscalls `stat` individuais) e exclusão automática de arquivos `.nup` e `.part` pré-existentes. Atualização do espaço livre no término do build via `StatFs` direto em ~0.1ms.
+  2. **Campo Dedicado de Nome de Arquivo**: Adicionado campo explícito "File Name (.nup)" separado da pasta de destino, sincronização automática com o campo "Title Name" e preservação do nome customizado ao navegar entre pastas.
+- **Evidência**: 7 testes unitários passando em 0.004s.
