@@ -36,7 +36,8 @@ class PackerViewModel : ViewModel() {
         private set
     var iconPath by mutableStateOf("")
         private set
-    var zstdLevel by mutableIntStateOf(0)
+    // Standard recommended compression level for NUP in emulators (fast streaming + high ratio)
+    var zstdLevel by mutableIntStateOf(3)
         private set
     var locTitles by mutableStateOf("")
         private set
@@ -83,7 +84,7 @@ class PackerViewModel : ViewModel() {
     }
 
     fun updateTitleId(tid: String) {
-        titleId = tid.trim()
+        titleId = tid.trim().removePrefix("0x").removePrefix("0X")
     }
 
     fun updateTitleName(title: String) {
@@ -120,8 +121,8 @@ class PackerViewModel : ViewModel() {
             val tid = PackerBridge.autoDetectTitleId(context, folder)
             withContext(Dispatchers.Main) {
                 if (tid.isNotEmpty()) {
-                    titleId = tid
-                    addLog("Auto-detected Title ID: $tid")
+                    titleId = tid.removePrefix("0x").removePrefix("0X")
+                    addLog("Auto-detected Title ID: $titleId")
                 } else {
                     addLog("Could not auto-detect Title ID from main.npdm")
                 }

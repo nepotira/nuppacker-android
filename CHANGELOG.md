@@ -3,6 +3,16 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · Versiona
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-06
+
+### Fixed
+- Fixed `'LinkedHashMap' object is not subscriptable` error when passing Kotlin parameters to Python in Chaquopy by serializing configs to JSON and adding recursive proxy normalization.
+- Fixed destination directory creation by automatically creating parent directories if they do not exist.
+- Fixed Title ID parsing to safely strip `0x` prefixes, lowercase characters, and whitespace.
+
+### Changed
+- Set default Zstandard compression level to **3** (the official recommended standard for NUP containers in emulators for fast streaming decompression).
+
 ## [0.1.0] - 2026-11-06
 
 ### Added
@@ -14,4 +24,5 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · Versiona
 - GitHub Actions workflows for continuous integration and automated APK compilation.
 - Initial project structure with documentation and governance under AGPL-3.0.
 
+[0.1.1]: https://github.com/nepotira/nuppacker-android/releases/tag/v0.1.1
 [0.1.0]: https://github.com/nepotira/nuppacker-android/releases/tag/v0.1.0
