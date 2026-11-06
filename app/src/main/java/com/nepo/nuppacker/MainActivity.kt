@@ -47,6 +47,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import kotlin.math.roundToInt
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -410,10 +411,14 @@ fun NUPPackerScreen(viewModel: PackerViewModel = viewModel()) {
             // Compression Card
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    val levelLabel = when (viewModel.zstdLevel) {
+                    var sliderLevel by remember(viewModel.zstdLevel) {
+                        mutableFloatStateOf(viewModel.zstdLevel.toFloat())
+                    }
+                    val displayLevel = sliderLevel.roundToInt()
+                    val levelLabel = when (displayLevel) {
                         0 -> "0 (raw / uncompressed)"
                         3 -> "3 (Recommended for emulators)"
-                        else -> "${viewModel.zstdLevel}"
+                        else -> "$displayLevel"
                     }
                     Text(
                         "Zstandard Compression Level: $levelLabel",
@@ -421,8 +426,13 @@ fun NUPPackerScreen(viewModel: PackerViewModel = viewModel()) {
                         fontWeight = FontWeight.SemiBold
                     )
                     Slider(
-                        value = viewModel.zstdLevel.toFloat(),
-                        onValueChange = { viewModel.updateZstdLevel(it.toInt()) },
+                        value = sliderLevel,
+                        onValueChange = {
+                            sliderLevel = it.roundToInt().toFloat()
+                        },
+                        onValueChangeFinished = {
+                            viewModel.updateZstdLevel(sliderLevel.roundToInt())
+                        },
                         valueRange = 0f..22f,
                         steps = 21,
                         modifier = Modifier.fillMaxWidth()

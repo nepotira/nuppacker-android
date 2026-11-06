@@ -99,7 +99,7 @@ class PackerViewModel : ViewModel() {
         return name.replace(Regex("""[\\/:*?"<>|]"""), "_").trim()
     }
 
-    private fun updateOutputPathCombined() {
+    private fun updateOutputPathCombined(triggerStorageEstimate: Boolean = true) {
         val cleanName = when {
             outputFileName.isEmpty() -> "game.nup"
             outputFileName.endsWith(".nup", ignoreCase = true) -> outputFileName
@@ -110,7 +110,9 @@ class PackerViewModel : ViewModel() {
         } else {
             cleanName
         }
-        updateStorageEstimate(forceRefreshDir = false)
+        if (triggerStorageEstimate) {
+            updateStorageEstimate(forceRefreshDir = false)
+        }
     }
 
     fun updateFolderInput(path: String, context: Context) {
@@ -129,10 +131,10 @@ class PackerViewModel : ViewModel() {
                     "${file.name}.nup"
                 }
             }
-            updateOutputPathCombined()
+            updateOutputPathCombined(triggerStorageEstimate = false)
 
             if (RustBridge.isNativeEngineAvailable()) {
-                // Unified native scan extracts Title ID, packages, and storage in a single ~200ms pass
+                // Unified native scan extracts Title ID, packages, and storage in a single pass
                 updateStorageEstimate(forceRefreshDir = true)
             } else {
                 if (titleId.isEmpty()) {
@@ -266,13 +268,15 @@ class PackerViewModel : ViewModel() {
             return
         }
 
-        // Instantly refresh available free space on destination in 0.1ms
-        refreshFreeSpace()
-
-        // If folder did not change and size is cached, calculate ratio and space INSTANTLY in 0ms!
+        // If folder did not change and size is cached, calculate ratio and space INSTANTLY
         val isSameFolder = folder == cachedFolder && updateFolder == cachedUpdate && dlcFolder == cachedDlc
         if (!forceRefreshDir && isSameFolder && cachedDumpSize > 0L) {
-            recalculateRatioAndSufficiency(cachedDumpSize)
+            viewModelScope.launch(Dispatchers.IO) {
+                refreshFreeSpace()
+                withContext(Dispatchers.Main) {
+                    recalculateRatioAndSufficiency(cachedDumpSize)
+                }
+            }
             return
         }
 
@@ -280,6 +284,7 @@ class PackerViewModel : ViewModel() {
         storageJob?.cancel()
         storageJob = viewModelScope.launch(Dispatchers.IO) {
             isCalculatingStorage = true
+            refreshFreeSpace()
             try {
                 if (RustBridge.isNativeEngineAvailable()) {
                     val jsonStr = RustBridge.analyzeFolder(folder)

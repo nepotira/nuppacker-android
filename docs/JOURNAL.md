@@ -161,3 +161,15 @@ Cronológico, mais novo embaixo. Use o modelo da regra `30-documentacao`. Regist
 - **Evidência**:
   - Release: `https://github.com/nepotira/nuppacker-android/releases/tag/v0.5.0`
   - SHA-256 (`app-debug.apk`): `7b63e24e4228bed90ffa56ebca7ff36eb4eb4dca4e94adbf0e1f47467243d779`
+
+## 2026-11-06 07:25 — Reengenharia do Pipeline: Contexto Zstd Persistente, Fim de Double-Read e Slider Desacoplado (v0.5.1)
+- **Ramo**: `fix/14-persistent-zstd-context-and-ui-decoupling`
+- **Contexto**: Diagnóstico de erros evidenciando salto no slider de compressão (0, 1, 2, 4, 5, 7...) e ineficiência de I/O em dumps grandes (50.000+ arquivos) com criação repetitiva de threadpools Zstd e double-read.
+- **Ações**:
+  1. **UI Slider**: Desacoplamento do Slider no Jetpack Compose com estado local `sliderLevel`, `roundToInt()` e disparo de atualização apenas em `onValueChangeFinished`.
+  2. **Thread de I/O**: Execução de `StatFs` estritamente em `Dispatchers.IO`, eliminando travamento e perda de frames de touch na thread principal.
+  3. **Zstd Bulk Compressor Reutilizável**: Criação de instância persistente de `zstd::bulk::Compressor` fora do loop, eliminando 50.000 recriações de contextos de compressão e threadpools em arquivos <= 4 MB.
+  4. **Eliminação de Double-Read**: Em arquivos <= 4 MB, o dado original é mantido em buffer de memória reutilizável; caso a compressão não reduza o tamanho, grava-se o buffer de memória direto, sem reabrir nem reler o arquivo do disco.
+  5. **Varredura Direcionada**: A análise de pastas percorre diretamente as raízes dos pacotes descobertos, evitando percursos redundantes.
+  6. **Bumping de Versão**: Atualizado para SemVer `0.5.1` (versionCode 12).
+- **Evidência**: Testes unitários Python passando (`7 tests OK`) e novo teste Rust `test_small_file_raw_fallback_and_compression` adicionado.
