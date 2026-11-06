@@ -213,6 +213,12 @@ class PackerViewModel : ViewModel() {
         locTitles = titles
     }
 
+    fun recalculateStorageManually() {
+        if (folder.isEmpty()) return
+        cachedDumpSize = 0L
+        updateStorageEstimate(forceRefreshDir = true)
+    }
+
     fun refreshFreeSpace() {
         val targetDir = if (outputPath.isNotEmpty()) {
             val p = File(outputPath).parentFile

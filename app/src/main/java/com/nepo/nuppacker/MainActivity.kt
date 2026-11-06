@@ -595,19 +595,35 @@ fun NUPPackerScreen(viewModel: PackerViewModel = viewModel()) {
                         modifier = Modifier.padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = if (isInsufficient) Icons.Default.Warning else Icons.Default.Storage,
-                                contentDescription = null,
-                                tint = if (isInsufficient) SwitchRed else SwitchBlue
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                "Storage & Space Estimation",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = if (isInsufficient) SwitchRed else MaterialTheme.colorScheme.onSurface
-                            )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = if (isInsufficient) Icons.Default.Warning else Icons.Default.Storage,
+                                    contentDescription = null,
+                                    tint = if (isInsufficient) SwitchRed else SwitchBlue
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    "Storage & Space Estimation",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isInsufficient) SwitchRed else MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                            IconButton(
+                                onClick = { viewModel.recalculateStorageManually() },
+                                enabled = !viewModel.isCalculatingStorage
+                            ) {
+                                Icon(
+                                    Icons.Default.Refresh,
+                                    contentDescription = "Recalculate Storage",
+                                    tint = SwitchBlue
+                                )
+                            }
                         }
 
                         if (viewModel.isCalculatingStorage) {
@@ -706,6 +722,21 @@ fun NUPPackerScreen(viewModel: PackerViewModel = viewModel()) {
                                         color = Color(0xFF2E7D32),
                                         fontWeight = FontWeight.Medium
                                     )
+                                }
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End
+                            ) {
+                                OutlinedButton(
+                                    onClick = { viewModel.recalculateStorageManually() },
+                                    enabled = !viewModel.isCalculatingStorage,
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                                ) {
+                                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Recalculate Storage", fontSize = 12.sp)
                                 }
                             }
                         }

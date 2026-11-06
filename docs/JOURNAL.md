@@ -89,3 +89,11 @@ Cronológico, mais novo embaixo. Use o modelo da regra `30-documentacao`. Regist
   1. **Cálculo Instantâneo**: Implementado cache em memória para o tamanho do dump; alterações de slider, destino ou nome recalculam o tamanho estimado em 0ms. Substituição de `File.listFiles()` por Java NIO `Files.walkFileTree` com `BasicFileAttributes` (evitando syscalls `stat` individuais) e exclusão automática de arquivos `.nup` e `.part` pré-existentes. Atualização do espaço livre no término do build via `StatFs` direto em ~0.1ms.
   2. **Campo Dedicado de Nome de Arquivo**: Adicionado campo explícito "File Name (.nup)" separado da pasta de destino, sincronização automática com o campo "Title Name" e preservação do nome customizado ao navegar entre pastas.
 - **Evidência**: 7 testes unitários passando em 0.004s.
+
+## 2026-11-06 04:52 — Botão de Recalcular Armazenamento Manualmente (v0.3.3)
+- **Ramo**: `feat/07-recalculate-storage-button`
+- **Ações**:
+  - Implementado `recalculateStorageManually()` em `PackerViewModel`, invalidando o cache em memória e forçando releitura fresca de disco.
+  - Adicionado botão de atualização no cabeçalho do cartão de estimativa e botão dedicado "Recalculate Storage" no rodapé do cartão.
+  - Permite atualizar medições de armazenamento a qualquer momento sem necessidade de reiniciar o aplicativo.
+- **Evidência**: 7 testes unitários passando em 0.004s.
