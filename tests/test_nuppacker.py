@@ -165,6 +165,37 @@ class TestNuppacker(unittest.TestCase):
             self.assertEqual(hdr_size, 0x80)
             self.assertEqual(hdr_ver, 1)
 
+    def test_cancellation(self):
+        base_dir = Path(self.test_dir) / "canceldump" / "base"
+        (base_dir / "exefs").mkdir(parents=True)
+        (base_dir / "romfs").mkdir(parents=True)
+        (base_dir / "romfs" / "big.bin").write_bytes(b"DATA" * 500)
+
+        out_nup = Path(self.test_dir) / "cancel_out.nup"
+        cfg_dict = {
+            "folder": str(base_dir.parent),
+            "output": str(out_nup),
+            "title_id": "0100000000010000",
+            "zstd": 0,
+        }
+
+        cancelled_called = [False]
+
+        class CancelCallback:
+            def onLog(self, msg): pass
+            def onProgress(self, p): pass
+            def onSuccess(self): pass
+            def onError(self, err, tb): pass
+            def onCancelled(self):
+                cancelled_called[0] = True
+            def isCancelled(self):
+                return True
+
+        run_packer_bridge(cfg_dict, CancelCallback())
+        self.assertTrue(cancelled_called[0])
+        self.assertFalse(out_nup.is_file())
+        self.assertFalse(Path(str(out_nup) + ".part").is_file())
+
 
 if __name__ == "__main__":
     unittest.main()

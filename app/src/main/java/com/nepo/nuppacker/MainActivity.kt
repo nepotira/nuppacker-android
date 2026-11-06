@@ -1,12 +1,15 @@
 package com.nepo.nuppacker
 
 import android.Manifest
+import android.annotation.SuppressLint
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.os.PowerManager
 import android.provider.DocumentsContract
 import android.provider.Settings
 import androidx.activity.ComponentActivity
@@ -14,6 +17,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -42,7 +46,6 @@ import com.nepo.nuppacker.ui.theme.NUPPackerTheme
 import com.nepo.nuppacker.ui.theme.SwitchBlue
 import com.nepo.nuppacker.ui.theme.SwitchRed
 import com.nepo.nuppacker.ui.theme.TerminalGreen
-import java.io.File
 
 class MainActivity : ComponentActivity() {
 
@@ -71,12 +74,29 @@ fun NUPPackerScreen(viewModel: PackerViewModel = viewModel()) {
         mutableStateOf(checkStoragePermission(context))
     }
 
+    var isBatteryOptimized by remember {
+        mutableStateOf(!isIgnoringBatteryOptimizations(context))
+    }
+
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) {
         hasStoragePermission = checkStoragePermission(context)
     }
 
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { /* Notification permission callback */ }
+
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+    }
+
+    // Input folder picker
     val folderPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
     ) { uri: Uri? ->
@@ -85,7 +105,20 @@ fun NUPPackerScreen(viewModel: PackerViewModel = viewModel()) {
             if (realPath != null) {
                 viewModel.updateFolderInput(realPath, context)
             } else {
-                viewModel.addLog("Selected SAF URI: $it (tip: for direct speed, you can paste the absolute path)")
+                viewModel.addLog("Selected SAF URI: $it (tip: you can also paste direct path)")
+            }
+        }
+    }
+
+    // Output destination folder picker
+    val outputFolderPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { uri: Uri? ->
+        uri?.let {
+            val realPath = resolvePathFromUri(context, it)
+            if (realPath != null) {
+                viewModel.updateOutputDirectory(realPath)
+                viewModel.addLog("Output folder updated: $realPath")
             }
         }
     }
@@ -139,17 +172,21 @@ fun NUPPackerScreen(viewModel: PackerViewModel = viewModel()) {
                     )
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
-                            "Storage Access Required",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.FolderSpecial, contentDescription = null, tint = SwitchRed)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                "Storage Access Required",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(6.dp))
                         Text(
                             "Switch game dumps require direct storage access to read multi-GB files without system sandbox limits.",
                             style = MaterialTheme.typography.bodyMedium
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
                         Button(
                             onClick = {
                                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -173,6 +210,52 @@ fun NUPPackerScreen(viewModel: PackerViewModel = viewModel()) {
                 }
             }
 
+            // Battery Optimization Banner (OEM specific)
+            if (isBatteryOptimized) {
+                val oemName = detectOemName()
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.BatteryAlert, contentDescription = null, tint = SwitchBlue)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                "Background Battery Optimization",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            "To ensure packing runs seamlessly in the background with the screen turned off (like ZArchiver), disable battery optimization for NUPPacker.",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        if (oemName.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                "Detected System: $oemName. ${getOemTip(oemName)}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(
+                                onClick = {
+                                    requestDisableBatteryOptimization(context)
+                                    isBatteryOptimized = !isIgnoringBatteryOptimizations(context)
+                                }
+                            ) {
+                                Text("Disable Optimization")
+                            }
+                        }
+                    }
+                }
+            }
+
             // Input Folder Card
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
@@ -185,7 +268,7 @@ fun NUPPackerScreen(viewModel: PackerViewModel = viewModel()) {
                     OutlinedTextField(
                         value = viewModel.folder,
                         onValueChange = { viewModel.updateFolderInput(it, context) },
-                        label = { Text("Folder path (e.g. /sdcard/Games/Zelda)") },
+                        label = { Text("Folder path (e.g. /sdcard/Games/Mario)") },
                         modifier = Modifier.fillMaxWidth(),
                         trailingIcon = {
                             IconButton(onClick = { folderPickerLauncher.launch(null) }) {
@@ -203,7 +286,7 @@ fun NUPPackerScreen(viewModel: PackerViewModel = viewModel()) {
                 }
             }
 
-            // Game Details Card
+            // Package Metadata Card
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
@@ -346,7 +429,7 @@ fun NUPPackerScreen(viewModel: PackerViewModel = viewModel()) {
                 }
             }
 
-            // Output Path Card
+            // Output Path Card (with Directory Browse Button)
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
@@ -359,7 +442,12 @@ fun NUPPackerScreen(viewModel: PackerViewModel = viewModel()) {
                         value = viewModel.outputPath,
                         onValueChange = { viewModel.updateOutputPath(it) },
                         label = { Text("Destination .nup path") },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        trailingIcon = {
+                            IconButton(onClick = { outputFolderPickerLauncher.launch(null) }) {
+                                Icon(Icons.Default.FolderOpen, contentDescription = "Select destination folder")
+                            }
+                        }
                     )
                 }
             }
@@ -385,6 +473,22 @@ fun NUPPackerScreen(viewModel: PackerViewModel = viewModel()) {
                     Icon(Icons.Default.Archive, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Build NUP File", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+
+            // Cancel Button (Active when packing)
+            if (viewModel.isPacking) {
+                OutlinedButton(
+                    onClick = { viewModel.cancelBuild(context) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = SwitchRed),
+                    border = BorderStroke(1.dp, SwitchRed)
+                ) {
+                    Icon(Icons.Default.Close, contentDescription = "Cancel Build")
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Cancel Build", fontWeight = FontWeight.Bold)
                 }
             }
 
@@ -477,7 +581,7 @@ fun NUPPackerScreen(viewModel: PackerViewModel = viewModel()) {
     }
 }
 
-private fun checkStoragePermission(context: android.content.Context): Boolean {
+private fun checkStoragePermission(context: Context): Boolean {
     return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
         Environment.isExternalStorageManager()
     } else {
@@ -488,7 +592,50 @@ private fun checkStoragePermission(context: android.content.Context): Boolean {
     }
 }
 
-private fun resolvePathFromUri(context: android.content.Context, treeUri: Uri): String? {
+private fun isIgnoringBatteryOptimizations(context: Context): Boolean {
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+        powerManager.isIgnoringBatteryOptimizations(context.packageName)
+    } else {
+        true
+    }
+}
+
+@SuppressLint("BatteryLife")
+private fun requestDisableBatteryOptimization(context: Context) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        try {
+            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                data = Uri.parse("package:${context.packageName}")
+            }
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            val fallback = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+            context.startActivity(fallback)
+        }
+    }
+}
+
+private fun detectOemName(): String {
+    val m = Build.MANUFACTURER.lowercase()
+    return when {
+        m.contains("xiaomi") || m.contains("redmi") || m.contains("poco") -> "HyperOS / MIUI"
+        m.contains("samsung") -> "Samsung One UI"
+        m.contains("motorola") -> "Motorola Moto UI"
+        else -> "Android Puro / AOSP"
+    }
+}
+
+private fun getOemTip(oem: String): String {
+    return when (oem) {
+        "HyperOS / MIUI" -> "Em Configurações > Apps > NUPPacker, ative 'Início automático' e defina Economia de Bateria como 'Sem restrições'."
+        "Samsung One UI" -> "Em Assistência do aparelho > Bateria, verifique se o app não está em 'Aplicativos suspensos'."
+        "Motorola Moto UI" -> "Verifique 'Gerenciamento em segundo plano' nas opções de bateria."
+        else -> "Permita atividade irrestrita em segundo plano para o aplicativo."
+    }
+}
+
+private fun resolvePathFromUri(context: Context, treeUri: Uri): String? {
     try {
         val docId = DocumentsContract.getTreeDocumentId(treeUri)
         val parts = docId.split(":")

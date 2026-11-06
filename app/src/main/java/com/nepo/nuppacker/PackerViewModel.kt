@@ -1,6 +1,7 @@
 package com.nepo.nuppacker
 
 import android.content.Context
+import android.content.Intent
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -12,6 +13,7 @@ import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import java.io.File
 
 class PackerViewModel : ViewModel() {
@@ -36,7 +38,7 @@ class PackerViewModel : ViewModel() {
         private set
     var iconPath by mutableStateOf("")
         private set
-    // Standard recommended compression level for NUP in emulators (fast streaming + high ratio)
+    // Standard recommended compression level for NUP in emulators (level 3)
     var zstdLevel by mutableIntStateOf(3)
         private set
     var locTitles by mutableStateOf("")
@@ -69,6 +71,16 @@ class PackerViewModel : ViewModel() {
             }
             inspectPackages(context)
         }
+    }
+
+    fun updateOutputDirectory(directoryPath: String) {
+        val dir = directoryPath.trim().removeSuffix("/")
+        val currentFileName = if (outputPath.isNotEmpty()) {
+            File(outputPath).name.ifEmpty { "game.nup" }
+        } else {
+            "game.nup"
+        }
+        outputPath = "$dir/$currentFileName"
     }
 
     fun updateUpdateFolder(path: String) {
@@ -156,6 +168,15 @@ class PackerViewModel : ViewModel() {
         logs.clear()
     }
 
+    fun cancelBuild(context: Context) {
+        if (!isPacking) return
+        addLog("Cancelling NUP build...")
+        PackerBridge.cancelActiveBuild()
+        PackerForegroundService.stopOrCancel(context)
+        isPacking = false
+        statusMessage = "Build cancelled by user."
+    }
+
     fun startBuild(context: Context) {
         if (folder.isEmpty() || outputPath.isEmpty() || titleId.isEmpty()) {
             statusMessage = "Input folder, output path, and Title ID are required."
@@ -185,12 +206,18 @@ class PackerViewModel : ViewModel() {
             "loc_titles" to locList
         )
 
+        val jsonPayload = JSONObject(config).toString()
+        val displayName = titleName.ifEmpty { File(outputPath).name }
+
         isPacking = true
         progress = 0f
         statusMessage = "Packing in progress..."
-        addLog("=== Starting NUP Build ===")
+        addLog("=== Starting NUP Build (High Performance Engine) ===")
         addLog("Target output: $outputPath")
         addLog("Title ID: $titleId | zstd level: $zstdLevel")
+
+        // Start Foreground Service with persistent notification
+        PackerForegroundService.startService(context, jsonPayload, displayName)
 
         viewModelScope.launch(Dispatchers.IO) {
             val callback = object : PackerCallback {
@@ -203,6 +230,15 @@ class PackerViewModel : ViewModel() {
                 override fun onProgress(ratio: Float) {
                     viewModelScope.launch(Dispatchers.Main) {
                         progress = ratio.coerceIn(0f, 1f)
+                        val percent = (progress * 100).toInt()
+                        // Update Foreground notification
+                        val updateIntent = Intent(context, PackerForegroundService::class.java).apply {
+                            action = PackerForegroundService.ACTION_UPDATE_PROGRESS
+                            putExtra(PackerForegroundService.EXTRA_TITLE_NAME, displayName)
+                            putExtra(PackerForegroundService.EXTRA_PROGRESS, percent)
+                            putExtra(PackerForegroundService.EXTRA_STATUS, "Packing files ($percent%)...")
+                        }
+                        context.startService(updateIntent)
                     }
                 }
 
@@ -212,6 +248,16 @@ class PackerViewModel : ViewModel() {
                         progress = 1f
                         statusMessage = "NUP Build Complete!"
                         addLog("Build completed successfully: $outputPath")
+                        PackerForegroundService.stopOrCancel(context)
+                    }
+                }
+
+                override fun onCancelled() {
+                    viewModelScope.launch(Dispatchers.Main) {
+                        isPacking = false
+                        statusMessage = "Build cancelled."
+                        addLog("Operation aborted by user. Temporary files cleaned.")
+                        PackerForegroundService.stopOrCancel(context)
                     }
                 }
 
@@ -221,7 +267,12 @@ class PackerViewModel : ViewModel() {
                         statusMessage = "Error: $error"
                         addLog("ERROR: $error")
                         addLog(traceback)
+                        PackerForegroundService.stopOrCancel(context)
                     }
+                }
+
+                override fun isCancelled(): Boolean {
+                    return PackerBridge.isCancellationRequested
                 }
             }
 
@@ -232,6 +283,7 @@ class PackerViewModel : ViewModel() {
                     isPacking = false
                     statusMessage = "Build failed: ${e.message}"
                     addLog("Exception: ${e.message}")
+                    PackerForegroundService.stopOrCancel(context)
                 }
             }
         }

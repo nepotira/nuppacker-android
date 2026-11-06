@@ -1,6 +1,6 @@
 """
-NUPPacker Core Engine
-Adapted for Android (and CLI / Termux) from PastaLaPate/NUPPacker.
+NUPPacker Core Engine — High Performance Android Overhaul
+Optimized for mobile storage throughput, single-pass streaming, multi-threading and background jobs.
 Licensed under GNU AGPL v3.0.
 """
 
@@ -15,7 +15,7 @@ import unicodedata
 from pathlib import Path
 
 NO_DIR = 0xFFFFFFFF
-CHUNK = 8 * 1024 * 1024
+CHUNK = 4 * 1024 * 1024  # 4MB optimal buffer for mobile flash storage page cache
 align16 = lambda n: (n + 15) & ~15
 
 
@@ -24,7 +24,6 @@ def _normalize_obj(obj):
     """
     Recursively normalizes Java/Kotlin proxies (LinkedHashMap, ArrayList),
     JSON strings, and native Python data structures into pure Python dicts/lists.
-    Prevents "'LinkedHashMap' object is not subscriptable" errors from Chaquopy.
     """
     if obj is None:
         return None
@@ -36,7 +35,6 @@ def _normalize_obj(obj):
             except Exception:
                 pass
         return str(obj)
-    # Java Map proxy (entrySet / items)
     if hasattr(obj, "entrySet"):
         out = {}
         for entry in obj.entrySet():
@@ -45,7 +43,6 @@ def _normalize_obj(obj):
         return out
     if hasattr(obj, "items"):
         return {str(k): _normalize_obj(v) for k, v in obj.items()}
-    # Java Collection proxy (toArray)
     if hasattr(obj, "toArray"):
         return [_normalize_obj(x) for x in obj.toArray()]
     if isinstance(obj, (list, tuple)):
@@ -114,7 +111,6 @@ def parse_version_name(name):
 
 
 def version_dirs(root: Path):
-    """root is a package dir -> [(None, root)]; else numeric subfolders that are package dirs."""
     if is_pkg_dir(root):
         return [(None, root)]
     out = []
@@ -126,7 +122,7 @@ def version_dirs(root: Path):
 
 
 def discover_dlc(dlc: Path):
-    if HEX16.match(dlc.name):  # user picked a single add-on folder
+    if HEX16.match(dlc.name):
         return [(2, int(dlc.name, 16), v, p) for v, p in version_dirs(dlc)]
     out = []
     for t in sorted(dlc.iterdir()):
@@ -136,7 +132,6 @@ def discover_dlc(dlc: Path):
 
 
 def discover(folder: Path):
-    """Returns [(kind, title_id|None, version|None, path)]."""
     if is_pkg_dir(folder):
         return [(0, None, None, folder)]
     specs = []
@@ -147,7 +142,7 @@ def discover(folder: Path):
     for n in ("dlc", "addon"):
         if (folder / n).is_dir():
             specs += discover_dlc(folder / n)
-    if not specs:  # user picked update/ or dlc/ directly
+    if not specs:
         specs = [(1, None, v, p) for v, p in version_dirs(folder)] or discover_dlc(
             folder
         )
@@ -168,7 +163,7 @@ def plan_packages(cfg, log):
     try:
         tid = int(raw_tid, 16)
     except ValueError:
-        raise ValueError(f"Invalid Title ID '{raw_tid}': must be a 16-hex-digit number (e.g. 0400C3F00006E000)")
+        raise ValueError(f"Invalid Title ID '{raw_tid}': must be a 16-hex-digit number.")
 
     folder_path = Path(str(cfg["folder"]).strip())
     specs = discover(folder_path)
@@ -217,7 +212,7 @@ def plan_packages(cfg, log):
     for s in norm:
         kind, ptid, ver, path = s
         meta = b""
-        if kind == 0 or (not has_base and s is best_update):  # app-level metadata
+        if kind == 0 or (not has_base and s is best_update):
             meta += app_meta(cfg, path, log)
         if cfg.get("display_version") and s is disp_target:
             meta += tlv(0x0004, str(cfg["display_version"]).encode("utf-8"))
@@ -246,7 +241,7 @@ def loc_block(items):
 
 def sha256_file(p):
     h = hashlib.sha256()
-    with open(p, "rb") as f:
+    with open(p, "rb", buffering=1024 * 1024) as f:
         while c := f.read(CHUNK):
             h.update(c)
     return h.digest()
@@ -293,19 +288,17 @@ def parse_ver(s):
     s = str(s).strip()
     if s.lower().startswith("0x"):
         return int(s, 16)
-    if "." not in s:  # raw NCM version, e.g. 458752
+    if "." not in s:
         return int(s)
     a = [int(x) for x in s.split(".")] + [0, 0, 0]
     return ((a[0] & 0xFFFF) << 16) | ((a[1] & 0xFF) << 8) | (a[2] & 0xFF)
 
 
 def guess_title_id(folder: Path):
-    """Best-effort read of the program id from main.npdm (ACI0). Switch 1 layout assumed."""
     try:
         folder = Path(folder)
         npdm_path = folder / "exefs" / "main.npdm"
         if not npdm_path.is_file():
-            # If folder itself has main.npdm
             npdm_path = folder / "main.npdm"
         if not npdm_path.is_file():
             return ""
@@ -341,8 +334,8 @@ class Pkg:
         s.meta, s.meta_off = m + meta, 0
 
 
-# ----------------------------------------------------------------- builder
-def build_nup(cfg, log=print, progress=lambda p: None):
+# ----------------------------------------------------------------- builder (high-performance overhaul)
+def build_nup(cfg, log=print, progress=lambda p: None, is_cancelled=lambda: False):
     cfg = _normalize_obj(cfg)
     pkgs = plan_packages(cfg, log)
     log("Packages: " + ", ".join("base" if p.kind == 0 else "update" for p in pkgs))
@@ -389,12 +382,18 @@ def build_nup(cfg, log=print, progress=lambda p: None):
 
     cctx = None
     zstd_level = int(cfg.get("zstd", 3))
+    threads_count = min(os.cpu_count() or 4, 8)
     if zstd_level > 0:
         try:
             import zstandard
-            cctx = zstandard.ZstdCompressor(level=zstd_level)
+            try:
+                cctx = zstandard.ZstdCompressor(level=zstd_level, threads=threads_count)
+                log(f"Zstandard active: level {zstd_level} ({threads_count} threads)")
+            except (TypeError, Exception):
+                cctx = zstandard.ZstdCompressor(level=zstd_level)
+                log(f"Zstandard active: level {zstd_level} (single thread)")
         except Exception as e:
-            log(f"Warning: zstandard error ({e}), proceeding without compression")
+            log(f"Warning: zstandard unavailable ({e}), proceeding raw")
             cctx = None
 
     done = 0
@@ -402,155 +401,190 @@ def build_nup(cfg, log=print, progress=lambda p: None):
     part = out_target + ".part"
     Path(part).parent.mkdir(parents=True, exist_ok=True)
 
-    with open(part, "wb") as out:
-        out.seek(blob_off)
-        seen = {}
-        for f in files:
-            f.size = f.path.stat().st_size
-            if f.size > (256 << 20):
-                log(f"Packing {f.path.name} ({f.size / 1e9:.2f} GB)")
-            if f.size == 0:
-                f.sha = hashlib.sha256(b"").digest()
-                continue
-            before = pos
-            pad = (-pos) % 16
-            out.write(b"\0" * pad)
-            pos += pad
-            start = pos
-            h = hashlib.sha256()
-            stored_raw = True
-            if cctx:
-                try:
-                    with open(f.path, "rb") as fin:  # pass 1: hash
-                        while chunk := fin.read(CHUNK):
-                            h.update(chunk)
-                    with open(f.path, "rb") as fin:  # pass 2: compress
-                        cctx.copy_stream(fin, out, size=f.size)
-                    csize = out.tell() - start
-                    if csize < f.size:
-                        stored_raw, f.codec, f.esize = False, 1, csize
-                        done += f.size
-                    else:  # not smaller -> store raw
+    try:
+        with open(part, "wb", buffering=1024 * 1024) as out:
+            out.seek(blob_off)
+            seen = {}
+            for f in files:
+                if is_cancelled and is_cancelled():
+                    log("Cancellation requested. Aborting packing.")
+                    raise InterruptedError("Cancelled by user")
+
+                f.size = f.path.stat().st_size
+                if f.size > (128 << 20):
+                    log(f"Packing {f.path.name} ({f.size / 1e9:.2f} GB)")
+                if f.size == 0:
+                    f.sha = hashlib.sha256(b"").digest()
+                    continue
+
+                before = pos
+                pad = (-pos) % 16
+                out.write(b"\0" * pad)
+                pos += pad
+                start = pos
+                h = hashlib.sha256()
+                stored_raw = True
+
+                # OPTIMIZATION: Single-pass streaming read & hash & compress
+                if cctx:
+                    try:
+                        compressor = cctx.compressobj()
+                        compressed_len = 0
+                        with open(f.path, "rb", buffering=1024 * 1024) as fin:
+                            while chunk := fin.read(CHUNK):
+                                if is_cancelled and is_cancelled():
+                                    raise InterruptedError("Cancelled by user")
+                                h.update(chunk)
+                                c_data = compressor.compress(chunk)
+                                if c_data:
+                                    out.write(c_data)
+                                    compressed_len += len(c_data)
+                        c_tail = compressor.flush()
+                        if c_tail:
+                            out.write(c_tail)
+                            compressed_len += len(c_tail)
+
+                        if compressed_len < f.size:
+                            stored_raw = False
+                            f.codec = 1
+                            f.esize = compressed_len
+                            done += f.size
+                        else:
+                            # Not smaller: discard compressed output and store raw
+                            out.seek(start)
+                            out.truncate()
+                            stored_raw = True
+                    except InterruptedError:
+                        raise
+                    except Exception as ce:
+                        log(f"Compression fallback on {f.path.name} ({ce})")
                         out.seek(start)
                         out.truncate()
-                except Exception as ce:
-                    log(f"Compression error on {f.path.name} ({ce}); storing raw")
-                    out.seek(start)
+                        stored_raw = True
+
+                if stored_raw:
+                    f.codec = 0
+                    with open(f.path, "rb", buffering=1024 * 1024) as fin:
+                        while chunk := fin.read(CHUNK):
+                            if is_cancelled and is_cancelled():
+                                raise InterruptedError("Cancelled by user")
+                            if not cctx or f.codec == 0:
+                                h.update(chunk)
+                            out.write(chunk)
+                            if not cctx:
+                                done += len(chunk)
+                                progress(done / total_bytes)
+                    f.esize = f.size
+                    if cctx:
+                        done += f.size
+
+                f.sha = h.digest()
+                key = (f.sha, f.size)
+                if key in seen:
+                    f.eoff, f.esize, f.codec = seen[key]
+                    out.seek(before)
                     out.truncate()
-                    stored_raw = True
+                    pos = before
+                else:
+                    f.eoff = start
+                    seen[key] = (start, f.esize, f.codec)
+                    pos = start + f.esize
+                progress(done / total_bytes)
+            file_size = pos
 
-            if stored_raw:
-                f.codec = 0
-                with open(f.path, "rb") as fin:
-                    while chunk := fin.read(CHUNK):
-                        if not cctx:
-                            h.update(chunk)
-                        out.write(chunk)
-                        if not cctx:
-                            done += len(chunk)
-                            progress(done / total_bytes)
-                f.esize = f.size
-                if cctx:
-                    done += f.size
-            f.sha = h.digest()
-            key = (f.sha, f.size)
-            if key in seen:  # identical content already stored
-                f.eoff, f.esize, f.codec = seen[key]
-                out.seek(before)
-                out.truncate()  # drop the copy we just wrote
-                pos = before
-            else:
-                f.eoff = start
-                seen[key] = (start, f.esize, f.codec)
-                pos = start + f.esize
-            progress(done / total_bytes)
-        file_size = pos
+            PKG_S = struct.Struct("<QIIIIBBHIQI20s")  # 0x40
+            DIR_S = struct.Struct("<IIIIQ")  # 0x18
+            FILE_S = struct.Struct("<IIQQQ32sBBH12s")  # 0x50
+            assert (PKG_S.size, DIR_S.size, FILE_S.size) == (0x40, 0x18, 0x50)
 
-        PKG_S = struct.Struct("<QIIIIBBHIQI20s")  # 0x40
-        DIR_S = struct.Struct("<IIIIQ")  # 0x18
-        FILE_S = struct.Struct("<IIQQQ32sBBH12s")  # 0x50
-        assert (PKG_S.size, DIR_S.size, FILE_S.size) == (0x40, 0x18, 0x50)
-
-        log("Building table of contents…")
-        parts = [struct.pack("<IIQQQQQ", 0x01434F54, P, D, F, pool_off, len(pool), 0)]
-        log("Preparing packages")
-        for i, p in enumerate(pkgs):
-            parts.append(
-                PKG_S.pack(
-                    p.title_id,
-                    p.root.idx,
-                    p.exefs.idx if p.exefs else NO_DIR,
-                    p.romfs.idx if p.romfs else NO_DIR,
-                    p.version,
-                    p.kind,
-                    p.flags,
-                    0,
-                    0,
-                    p.meta_off,
-                    len(p.meta),
-                    b"\0" * 20,
+            log("Building table of contents…")
+            parts = [struct.pack("<IIQQQQQ", 0x01434F54, P, D, F, pool_off, len(pool), 0)]
+            for i, p in enumerate(pkgs):
+                parts.append(
+                    PKG_S.pack(
+                        p.title_id,
+                        p.root.idx,
+                        p.exefs.idx if p.exefs else NO_DIR,
+                        p.romfs.idx if p.romfs else NO_DIR,
+                        p.version,
+                        p.kind,
+                        p.flags,
+                        0,
+                        0,
+                        p.meta_off,
+                        len(p.meta),
+                        b"\0" * 20,
+                    )
                 )
-            )
-            progress(i / len(pkgs))
 
-        log("Preparing directories")
-        for i, d in enumerate(dirs):
-            no, nl = pmap[d.name]
-            parts.append(DIR_S.pack(no, nl, d.first, d.count, 0))
-            progress(i / len(dirs))
+            for i, d in enumerate(dirs):
+                no, nl = pmap[d.name]
+                parts.append(DIR_S.pack(no, nl, d.first, d.count, 0))
 
-        log("Preparing Files")
-        for i, f in enumerate(files):
-            no, nl = pmap[f.name]
-            parts.append(
-                FILE_S.pack(
-                    no, nl, f.size, f.eoff, f.esize, f.sha, f.codec, 0, 0, b"\0" * 12
+            for i, f in enumerate(files):
+                no, nl = pmap[f.name]
+                parts.append(
+                    FILE_S.pack(
+                        no, nl, f.size, f.eoff, f.esize, f.sha, f.codec, 0, 0, b"\0" * 12
+                    )
                 )
+
+            parts.append(struct.pack(f"<{len(children)}I", *children))
+            parts.append(bytes(pool))
+            toc = b"".join(parts).ljust(toc_size, b"\0")
+            assert len(toc) == toc_size
+            log(f"TOC generated ({len(toc) / 1e6:.1f} MB)")
+
+            uh = hashlib.sha256()
+            for p in pkgs:
+                uh.update(struct.pack("<QIB", p.title_id, p.version, p.kind))
+
+            sup = struct.pack(
+                "<4sHHQQ32sQQII16s32s",
+                b"NUP\x01",
+                0x80,
+                1,
+                0x80,
+                toc_size,
+                hashlib.sha256(toc).digest(),
+                blob_off,
+                file_size,
+                P,
+                0,
+                uh.digest()[:16],
+                b"\0" * 32,
             )
-            progress(i / len(files))
-        log("Writing TOC")
-        parts.append(struct.pack(f"<{len(children)}I", *children))
-        parts.append(bytes(pool))
-        toc = b"".join(parts).ljust(toc_size, b"\0")
-        assert len(toc) == toc_size
-        log(f"TOC: {len(toc) / 1e6:.1f} MB")
-        log("Finalizing...")
+            assert len(sup) == 0x80
+            out.seek(0)
+            out.write(sup)
+            out.write(toc)
+            for p in pkgs:
+                if p.meta:
+                    out.seek(p.meta_off)
+                    out.write(p.meta)
+            out.truncate(file_size)
 
-        uh = hashlib.sha256()
-        for p in pkgs:
-            uh.update(struct.pack("<QIB", p.title_id, p.version, p.kind))
+        os.replace(part, out_target)
+        log(f"Done: {out_target} ({file_size / 1e9:.2f} GB)")
 
-        sup = struct.pack(
-            "<4sHHQQ32sQQII16s32s",
-            b"NUP\x01",
-            0x80,
-            1,
-            0x80,
-            toc_size,
-            hashlib.sha256(toc).digest(),
-            blob_off,
-            file_size,
-            P,
-            0,
-            uh.digest()[:16],
-            b"\0" * 32,
-        )
-        assert len(sup) == 0x80
-        out.seek(0)
-        out.write(sup)
-        out.write(toc)
-        for p in pkgs:
-            if p.meta:
-                out.seek(p.meta_off)
-                out.write(p.meta)
-        out.truncate(file_size)
-    os.replace(part, out_target)
-    log(f"Done: {out_target} ({file_size / 1e9:.2f} GB)")
+    except InterruptedError:
+        if os.path.exists(part):
+            try:
+                os.remove(part)
+            except Exception:
+                pass
+        raise
+    except Exception:
+        if os.path.exists(part):
+            try:
+                os.remove(part)
+            except Exception:
+                pass
+        raise
 
 
 # ----------------------------------------------------------------- Android Bridge
 def auto_detect_title_id(folder_path: str) -> str:
-    """Helper for Android Kotlin UI to auto-detect title ID."""
     folder = Path(str(folder_path).strip())
     specs = discover(folder)
     path = specs[0][3] if specs else None
@@ -558,7 +592,6 @@ def auto_detect_title_id(folder_path: str) -> str:
 
 
 def discover_summary(folder_path: str) -> list:
-    """Helper for Android Kotlin UI to preview discovered packages."""
     out = []
     for k, t, v, p in discover(Path(str(folder_path).strip())):
         out.append({
@@ -570,11 +603,6 @@ def discover_summary(folder_path: str) -> list:
 
 
 def run_packer_bridge(cfg_input, callback=None):
-    """
-    Bridge entrypoint called by Chaquopy / Android Kotlin background thread.
-    Normalizes Java Map proxies, JSON strings, or dicts to pure Python dicts.
-    callback can have onLog(msg), onProgress(val), onSuccess(), onError(err, tb) methods.
-    """
     def _log(msg):
         if callback and hasattr(callback, "onLog"):
             callback.onLog(str(msg))
@@ -585,11 +613,23 @@ def run_packer_bridge(cfg_input, callback=None):
         if callback and hasattr(callback, "onProgress"):
             callback.onProgress(float(val))
 
+    def _is_canc():
+        if callback and hasattr(callback, "isCancelled"):
+            try:
+                return bool(callback.isCancelled())
+            except Exception:
+                return False
+        return False
+
     try:
         cfg = _normalize_obj(cfg_input)
-        build_nup(cfg, _log, _prog)
+        build_nup(cfg, _log, _prog, _is_canc)
         if callback and hasattr(callback, "onSuccess"):
             callback.onSuccess()
+    except InterruptedError:
+        _log("Packing operation cancelled successfully.")
+        if callback and hasattr(callback, "onCancelled"):
+            callback.onCancelled()
     except Exception as e:
         tb = traceback.format_exc()
         if callback and hasattr(callback, "onError"):
