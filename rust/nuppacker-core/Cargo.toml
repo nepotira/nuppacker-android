@@ -1,0 +1,44 @@
+[package]
+name = "nuppacker-core"
+version = "0.4.0"
+edition = "2021"
+authors = ["nepo"]
+license = "AGPL-3.0"
+description = "High-performance native NUP container packaging engine for Android"
+
+[lib]
+name = "nuppacker_android"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# JNI bindings for Android
+jni = { version = "0.21", default-features = false }
+
+# Native Zstandard with multithreading support
+zstd = { version = "0.13", features = ["zstdmt"] }
+
+# SHA-256 with ARMv8 Cryptographic extensions assembly support
+sha2 = { version = "0.10", features = ["asm"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# POSIX I/O helpers
+libc = "0.2"
+
+# Fast recursive directory walking
+walkdir = "2.5"
+
+# Unicode NFC normalization (NUP spec requirement)
+unicode-normalization = "0.1"
+
+[dev-dependencies]
+tempfile = "3.10"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+strip = true

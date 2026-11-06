@@ -20,3 +20,13 @@ jobs:
       - name: Run Python unit tests
         run: |
           python3 -m unittest discover tests
+
+      - name: Set up Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Run Rust unit tests
+        run: |
+          cd rust/nuppacker-core
+          cargo test --verbose

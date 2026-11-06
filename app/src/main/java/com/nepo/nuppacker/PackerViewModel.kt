@@ -354,7 +354,11 @@ class PackerViewModel : ViewModel() {
     fun autoDetectTitleId(context: Context) {
         if (folder.isEmpty()) return
         viewModelScope.launch(Dispatchers.IO) {
-            val tid = PackerBridge.autoDetectTitleId(context, folder)
+            val tid = if (RustBridge.isNativeEngineAvailable()) {
+                RustBridge.autoDetectTitleId(folder)
+            } else {
+                PackerBridge.autoDetectTitleId(context, folder)
+            }
             withContext(Dispatchers.Main) {
                 if (tid.isNotEmpty()) {
                     titleId = tid.removePrefix("0x").removePrefix("0X")
@@ -369,7 +373,26 @@ class PackerViewModel : ViewModel() {
     fun inspectPackages(context: Context) {
         if (folder.isEmpty()) return
         viewModelScope.launch(Dispatchers.IO) {
-            val summary = PackerBridge.discoverSummary(context, folder)
+            val summary = if (RustBridge.isNativeEngineAvailable()) {
+                val jsonStr = RustBridge.discoverSummary(folder)
+                val list = mutableListOf<Map<String, String>>()
+                try {
+                    val arr = org.json.JSONArray(jsonStr)
+                    for (i in 0 until arr.length()) {
+                        val obj = arr.getJSONObject(i)
+                        list.add(mapOf(
+                            "kind" to obj.optString("kind", "unknown"),
+                            "version" to obj.optString("version", "0"),
+                            "path" to obj.optString("path", "")
+                        ))
+                    }
+                } catch (e: Exception) {
+                    // Fallback
+                }
+                list
+            } else {
+                PackerBridge.discoverSummary(context, folder)
+            }
             withContext(Dispatchers.Main) {
                 discoveredPackages.clear()
                 for (item in summary) {
@@ -395,6 +418,9 @@ class PackerViewModel : ViewModel() {
     fun cancelBuild(context: Context) {
         if (!isPacking) return
         addLog("Cancelling NUP build...")
+        if (RustBridge.isNativeEngineAvailable()) {
+            RustBridge.cancelBuild()
+        }
         PackerBridge.cancelActiveBuild()
         PackerForegroundService.stopOrCancel(context)
         isPacking = false
@@ -436,7 +462,8 @@ class PackerViewModel : ViewModel() {
         isPacking = true
         progress = 0f
         statusMessage = "Packing in progress..."
-        addLog("=== Starting NUP Build (High Performance Engine) ===")
+        val isNative = RustBridge.isNativeEngineAvailable()
+        addLog(if (isNative) "=== Starting NUP Build (Native Rust Core / ARMv8 Hardware Crypto) ===" else "=== Starting NUP Build (Python Engine) ===")
         addLog("Target output: $outputPath")
         addLog("Title ID: $titleId | zstd level: $zstdLevel")
 
@@ -444,73 +471,126 @@ class PackerViewModel : ViewModel() {
         PackerForegroundService.startService(context, jsonPayload, displayName)
 
         viewModelScope.launch(Dispatchers.IO) {
-            val callback = object : PackerCallback {
-                override fun onLog(message: String) {
-                    viewModelScope.launch(Dispatchers.Main) {
-                        addLog(message)
-                    }
-                }
-
-                override fun onProgress(ratio: Float) {
-                    viewModelScope.launch(Dispatchers.Main) {
-                        progress = ratio.coerceIn(0f, 1f)
-                        val percent = (progress * 100).toInt()
-                        // Update Foreground notification
-                        val updateIntent = Intent(context, PackerForegroundService::class.java).apply {
-                            action = PackerForegroundService.ACTION_UPDATE_PROGRESS
-                            putExtra(PackerForegroundService.EXTRA_TITLE_NAME, displayName)
-                            putExtra(PackerForegroundService.EXTRA_PROGRESS, percent)
-                            putExtra(PackerForegroundService.EXTRA_STATUS, "Packing files ($percent%)...")
+            if (isNative) {
+                val rustCallback = object : RustCallback {
+                    override fun onLog(message: String) {
+                        viewModelScope.launch(Dispatchers.Main) {
+                            addLog(message)
                         }
-                        context.startService(updateIntent)
+                    }
+
+                    override fun onProgress(ratio: Float) {
+                        viewModelScope.launch(Dispatchers.Main) {
+                            progress = ratio.coerceIn(0f, 1f)
+                            val percent = (progress * 100).toInt()
+                            val updateIntent = Intent(context, PackerForegroundService::class.java).apply {
+                                action = PackerForegroundService.ACTION_UPDATE_PROGRESS
+                                putExtra(PackerForegroundService.EXTRA_TITLE_NAME, displayName)
+                                putExtra(PackerForegroundService.EXTRA_PROGRESS, percent)
+                                putExtra(PackerForegroundService.EXTRA_STATUS, "Packing files ($percent%)...")
+                            }
+                            context.startService(updateIntent)
+                        }
+                    }
+
+                    override fun onSuccess(outputPath: String) {
+                        viewModelScope.launch(Dispatchers.Main) {
+                            isPacking = false
+                            progress = 1f
+                            statusMessage = "NUP Build Complete!"
+                            addLog("Build completed successfully: $outputPath")
+                            PackerForegroundService.stopOrCancel(context)
+                            refreshFreeSpace()
+                            recalculateRatioAndSufficiency(cachedDumpSize)
+                        }
+                    }
+
+                    override fun onCancelled() {
+                        viewModelScope.launch(Dispatchers.Main) {
+                            isPacking = false
+                            statusMessage = "Build cancelled."
+                            addLog("Operation aborted by user. Temporary files cleaned.")
+                            PackerForegroundService.stopOrCancel(context)
+                        }
+                    }
+
+                    override fun onError(error: String) {
+                        viewModelScope.launch(Dispatchers.Main) {
+                            isPacking = false
+                            statusMessage = "Error: $error"
+                            addLog("ERROR: $error")
+                            PackerForegroundService.stopOrCancel(context)
+                        }
+                    }
+                }
+                RustBridge.startBuild(jsonPayload, rustCallback)
+            } else {
+                val callback = object : PackerCallback {
+                    override fun onLog(message: String) {
+                        viewModelScope.launch(Dispatchers.Main) {
+                            addLog(message)
+                        }
+                    }
+
+                    override fun onProgress(ratio: Float) {
+                        viewModelScope.launch(Dispatchers.Main) {
+                            progress = ratio.coerceIn(0f, 1f)
+                            val percent = (progress * 100).toInt()
+                            val updateIntent = Intent(context, PackerForegroundService::class.java).apply {
+                                action = PackerForegroundService.ACTION_UPDATE_PROGRESS
+                                putExtra(PackerForegroundService.EXTRA_TITLE_NAME, displayName)
+                                putExtra(PackerForegroundService.EXTRA_PROGRESS, percent)
+                                putExtra(PackerForegroundService.EXTRA_STATUS, "Packing files ($percent%)...")
+                            }
+                            context.startService(updateIntent)
+                        }
+                    }
+
+                    override fun onSuccess() {
+                        viewModelScope.launch(Dispatchers.Main) {
+                            isPacking = false
+                            progress = 1f
+                            statusMessage = "NUP Build Complete!"
+                            addLog("Build completed successfully: $outputPath")
+                            PackerForegroundService.stopOrCancel(context)
+                            refreshFreeSpace()
+                            recalculateRatioAndSufficiency(cachedDumpSize)
+                        }
+                    }
+
+                    override fun onCancelled() {
+                        viewModelScope.launch(Dispatchers.Main) {
+                            isPacking = false
+                            statusMessage = "Build cancelled."
+                            addLog("Operation aborted by user. Temporary files cleaned.")
+                            PackerForegroundService.stopOrCancel(context)
+                        }
+                    }
+
+                    override fun onError(error: String, traceback: String) {
+                        viewModelScope.launch(Dispatchers.Main) {
+                            isPacking = false
+                            statusMessage = "Error: $error"
+                            addLog("ERROR: $error")
+                            addLog(traceback)
+                            PackerForegroundService.stopOrCancel(context)
+                        }
+                    }
+
+                    override fun isCancelled(): Boolean {
+                        return PackerBridge.isCancellationRequested
                     }
                 }
 
-                override fun onSuccess() {
-                    viewModelScope.launch(Dispatchers.Main) {
+                try {
+                    PackerBridge.executePacker(context, config, callback)
+                } catch (e: Exception) {
+                    withContext(Dispatchers.Main) {
                         isPacking = false
-                        progress = 1f
-                        statusMessage = "NUP Build Complete!"
-                        addLog("Build completed successfully: $outputPath")
-                        PackerForegroundService.stopOrCancel(context)
-                        // Instantly refresh remaining free storage on device (0.1ms via StatFs)
-                        refreshFreeSpace()
-                        recalculateRatioAndSufficiency(cachedDumpSize)
-                    }
-                }
-
-                override fun onCancelled() {
-                    viewModelScope.launch(Dispatchers.Main) {
-                        isPacking = false
-                        statusMessage = "Build cancelled."
-                        addLog("Operation aborted by user. Temporary files cleaned.")
+                        statusMessage = "Build failed: ${e.message}"
+                        addLog("Exception: ${e.message}")
                         PackerForegroundService.stopOrCancel(context)
                     }
-                }
-
-                override fun onError(error: String, traceback: String) {
-                    viewModelScope.launch(Dispatchers.Main) {
-                        isPacking = false
-                        statusMessage = "Error: $error"
-                        addLog("ERROR: $error")
-                        addLog(traceback)
-                        PackerForegroundService.stopOrCancel(context)
-                    }
-                }
-
-                override fun isCancelled(): Boolean {
-                    return PackerBridge.isCancellationRequested
-                }
-            }
-
-            try {
-                PackerBridge.executePacker(context, config, callback)
-            } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
-                    isPacking = false
-                    statusMessage = "Build failed: ${e.message}"
-                    addLog("Exception: ${e.message}")
-                    PackerForegroundService.stopOrCancel(context)
                 }
             }
         }
