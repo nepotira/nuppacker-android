@@ -95,6 +95,7 @@ sequenceDiagram
 - [ADR 0001: Adoção de regras e governança](file:///home/nepo/Downloads/NUP/docs/adr/0001-adotar-regras-e-registro-de-decisoes.md)
 - [ADR 0002: Stack Android e reaproveitamento do motor Python original](file:///home/nepo/Downloads/NUP/docs/adr/0002-stack-android-e-reaproveitamento-python.md)
 - [ADR 0003: Licenciamento sob GNU AGPL v3](file:///home/nepo/Downloads/NUP/docs/adr/0003-licenciamento-agpl-3.md)
+- [ADR 0004: Migração do motor de empacotamento para Rust nativo](file:///home/nepo/Downloads/NUP/docs/adr/0004-migracao-motor-nativo-rust.md)
 
 ## 6. Pipeline de Construção (CI)
 A compilação do APK ocorre primariamente no **GitHub Actions** via GitHub CLI (`gh`), utilizando o runner `ubuntu-latest`, JDK 17, Android SDK com CMake/NDK e Gradle Wrapper.
