@@ -3,6 +3,17 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · Versiona
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-06
+
+### Added
+- **Storage & Space Estimation Card**: Real-time calculation of original dump size, estimated final `.NUP` size based on selected Zstd level, and available free storage on the destination drive using `StatFs`.
+- **Low Disk Space Warning & Safety Lock**: Automatic detection when device storage is insufficient for the build, disabling the start button with a clear warning banner and providing an override checkbox ("Ignore warning and build anyway") to prevent crashes and file corruption.
+
+### Fixed
+- **Input Focus & Virtual Keyboard Dismissal**: Implemented tap-to-clear-focus on all cards, empty spaces, and background areas, preventing text inputs from staying persistently focused.
+- **Auto Keyboard Dismiss on App Pause**: Automatically clears focus when the app is minimized or backgrounded (`ON_PAUSE`), preventing the virtual keyboard from automatically reopening upon returning to the app.
+- Configured `ImeAction.Done` and `keyboardActions` on all single-line input fields for immediate keyboard dismissal on keyboard action.
+
 ## [0.2.0] - 2026-11-06
 
 ### Added
@@ -34,6 +45,7 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · Versiona
 - GitHub Actions workflows for continuous integration and automated APK compilation.
 - Initial project structure with documentation and governance under AGPL-3.0.
 
+[0.3.0]: https://github.com/nepotira/nuppacker-android/releases/tag/v0.3.0
 [0.2.0]: https://github.com/nepotira/nuppacker-android/releases/tag/v0.2.0
 [0.1.1]: https://github.com/nepotira/nuppacker-android/releases/tag/v0.1.1
 [0.1.0]: https://github.com/nepotira/nuppacker-android/releases/tag/v0.1.0

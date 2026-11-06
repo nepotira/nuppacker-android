@@ -56,3 +56,17 @@ Cronológico, mais novo embaixo. Use o modelo da regra `30-documentacao`. Regist
   5. **Botão de Cancelamento**: Adicionado botão "Cancel Build" na UI e na notificação com deleção imediata do arquivo parcial `.part`.
   6. **Seletor de pasta de saída**: Adicionado botão de navegação para a pasta do arquivo `.nup` de destino.
 - **Evidência**: 7 testes unitários passando em 0.003s.
+
+## 2026-11-06 02:40 — Estimativa de Armazenamento e Correção de Foco/Teclado (v0.3.0)
+- **Ramo**: `feat/04-storage-estimation-and-focus-fix`
+- **Ações**:
+  1. **Estimativa de Tamanho e Alerta de Armazenamento**:
+     - Implementado cálculo recursivo assíncrono do tamanho do dump original (`calculateDirSize`).
+     - Cálculo da estimativa do tamanho final do `.nup` baseado no nível de compressão Zstandard selecionado (ratio ~58% no nível 3 recomendado).
+     - Verificação do espaço livre em disco via `StatFs` no diretório de destino.
+     - Card visual no Compose exibindo tamanho original, tamanho estimado e espaço livre. Se o espaço for insuficiente, bloqueia o botão de início com aviso destacado e oferece checkbox de confirmação para prosseguir caso o usuário deseje.
+  2. **Deseleção de Campos de Texto e Controle de Teclado**:
+     - Configurado `focusManager.clearFocus()` em cliques em espaços vazios, áreas nulas e cartões de opções via `clickable(indication = null)`.
+     - Adicionado listener de ciclo de vida (`ON_PAUSE`) para desmarcar o foco imediatamente ao minimizar ou sair do aplicativo, evitando reabertura automática do teclado ao retornar ao app.
+     - Configurado `ImeAction.Done` e `keyboardActions` em todos os campos de texto de linha única.
+- **Evidência**: 7 testes unitários passando em 0.004s.
