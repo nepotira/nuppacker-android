@@ -24,3 +24,8 @@ Cronológico, mais novo embaixo. Use o modelo da regra `30-documentacao`. Regist
   - Implementação da UI tátil em `MainActivity.kt` e `PackerViewModel.kt` com barra de progresso, console de logs em tempo real e detecção de Title ID.
   - Configuração dos workflows do GitHub Actions (`build.yml` e `ci.yml`) para compilação automatizada do APK via GitHub CLI.
 - **Evidência**: Testes unitários do motor Python rodaram com sucesso (`Ran 4 tests in 0.002s, OK`).
+
+## 2026-11-06 01:12 — Ajuste de versão da dependência zstandard para Chaquopy
+- **Sintoma**: Falha no build do CI na task `:app:installDebugPythonRequirements`.
+- **Causa**: O repositório de wheels do Chaquopy para Android fornece `zstandard==0.15.2` (compilado para arm64-v8a/x86_64), incompatível com a restrição estrita `>=0.25.0`.
+- **Solução**: Ajustado para `install("zstandard")` permitindo a utilização do wheel nativo pré-compilado do Chaquopy.

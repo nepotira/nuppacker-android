@@ -27,7 +27,7 @@ android {
         defaultConfig {
             version = "3.11"
             pip {
-                install("zstandard>=0.25.0")
+                install("zstandard")
             }
         }
         sourceSets {
