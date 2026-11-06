@@ -19,12 +19,16 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -36,11 +40,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nepo.nuppacker.ui.theme.NUPPackerTheme
 import com.nepo.nuppacker.ui.theme.SwitchBlue
@@ -68,7 +77,22 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun NUPPackerScreen(viewModel: PackerViewModel = viewModel()) {
     val context = LocalContext.current
+    val focusManager = LocalFocusManager.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val scrollState = rememberScrollState()
+
+    // Dismiss focus and keyboard automatically when app is minimized or backgrounded
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_PAUSE) {
+                focusManager.clearFocus()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
 
     var hasStoragePermission by remember {
         mutableStateOf(checkStoragePermission(context))
@@ -158,6 +182,12 @@ fun NUPPackerScreen(viewModel: PackerViewModel = viewModel()) {
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null
+                ) {
+                    focusManager.clearFocus()
+                }
                 .padding(horizontal = 16.dp)
                 .verticalScroll(scrollState),
             verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -257,7 +287,14 @@ fun NUPPackerScreen(viewModel: PackerViewModel = viewModel()) {
             }
 
             // Input Folder Card
-            Card(modifier = Modifier.fillMaxWidth()) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) { focusManager.clearFocus() }
+            ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
                         "Input Game Dump Folder",
@@ -270,6 +307,9 @@ fun NUPPackerScreen(viewModel: PackerViewModel = viewModel()) {
                         onValueChange = { viewModel.updateFolderInput(it, context) },
                         label = { Text("Folder path (e.g. /sdcard/Games/Mario)") },
                         modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
                         trailingIcon = {
                             IconButton(onClick = { folderPickerLauncher.launch(null) }) {
                                 Icon(Icons.Default.FolderOpen, contentDescription = "Browse folder")
@@ -287,7 +327,14 @@ fun NUPPackerScreen(viewModel: PackerViewModel = viewModel()) {
             }
 
             // Package Metadata Card
-            Card(modifier = Modifier.fillMaxWidth()) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) { focusManager.clearFocus() }
+            ) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
                         "Package Metadata",
@@ -304,7 +351,10 @@ fun NUPPackerScreen(viewModel: PackerViewModel = viewModel()) {
                             value = viewModel.titleId,
                             onValueChange = { viewModel.updateTitleId(it) },
                             label = { Text("Title ID (16 hex)") },
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                            keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() })
                         )
                         IconButton(
                             onClick = { viewModel.autoDetectTitleId(context) },
@@ -318,7 +368,10 @@ fun NUPPackerScreen(viewModel: PackerViewModel = viewModel()) {
                         value = viewModel.titleName,
                         onValueChange = { viewModel.updateTitleName(it) },
                         label = { Text("Title Name (e.g. Mario Kart World)") },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() })
                     )
 
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -326,13 +379,19 @@ fun NUPPackerScreen(viewModel: PackerViewModel = viewModel()) {
                             value = viewModel.version,
                             onValueChange = { viewModel.updateVersion(it) },
                             label = { Text("Base Version") },
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                            keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() })
                         )
                         OutlinedTextField(
                             value = viewModel.updateVersion,
                             onValueChange = { viewModel.updateUpdateVersion(it) },
                             label = { Text("Update Version") },
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                            keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() })
                         )
                     }
 
@@ -340,7 +399,10 @@ fun NUPPackerScreen(viewModel: PackerViewModel = viewModel()) {
                         value = viewModel.displayVersion,
                         onValueChange = { viewModel.updateDisplayVersion(it) },
                         label = { Text("Display Version (e.g. 1.0.0)") },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() })
                     )
                 }
             }
@@ -402,19 +464,28 @@ fun NUPPackerScreen(viewModel: PackerViewModel = viewModel()) {
                             value = viewModel.updateFolder,
                             onValueChange = { viewModel.updateUpdateFolder(it) },
                             label = { Text("Extra Updates folder (optional)") },
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                            keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() })
                         )
                         OutlinedTextField(
                             value = viewModel.dlcFolder,
                             onValueChange = { viewModel.updateDlcFolder(it) },
                             label = { Text("DLC folder (optional)") },
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                            keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() })
                         )
                         OutlinedTextField(
                             value = viewModel.iconPath,
                             onValueChange = { viewModel.updateIconPath(it) },
                             label = { Text("Icon path (PNG/JPEG, optional)") },
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                            keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() })
                         )
                         OutlinedTextField(
                             value = viewModel.locTitles,
@@ -422,7 +493,8 @@ fun NUPPackerScreen(viewModel: PackerViewModel = viewModel()) {
                             label = { Text("Localized titles (lang=name, one per line)") },
                             placeholder = { Text("pt-br=Mario Kart\nja=マリオカート") },
                             modifier = Modifier.fillMaxWidth(),
-                            minLines = 2
+                            minLines = 2,
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default)
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                     }
@@ -430,7 +502,14 @@ fun NUPPackerScreen(viewModel: PackerViewModel = viewModel()) {
             }
 
             // Output Path Card (with Directory Browse Button)
-            Card(modifier = Modifier.fillMaxWidth()) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) { focusManager.clearFocus() }
+            ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
                         "Output .nup File",
@@ -443,6 +522,9 @@ fun NUPPackerScreen(viewModel: PackerViewModel = viewModel()) {
                         onValueChange = { viewModel.updateOutputPath(it) },
                         label = { Text("Destination .nup path") },
                         modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
                         trailingIcon = {
                             IconButton(onClick = { outputFolderPickerLauncher.launch(null) }) {
                                 Icon(Icons.Default.FolderOpen, contentDescription = "Select destination folder")
@@ -452,14 +534,163 @@ fun NUPPackerScreen(viewModel: PackerViewModel = viewModel()) {
                 }
             }
 
+            // Storage Estimation & Space Check Card
+            if (viewModel.folder.isNotEmpty()) {
+                val isInsufficient = viewModel.isStorageSufficient == false
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) { focusManager.clearFocus() },
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isInsufficient) {
+                            MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.45f)
+                        } else {
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                        }
+                    ),
+                    border = if (isInsufficient) BorderStroke(1.dp, SwitchRed) else null
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = if (isInsufficient) Icons.Default.Warning else Icons.Default.Storage,
+                                contentDescription = null,
+                                tint = if (isInsufficient) SwitchRed else SwitchBlue
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                "Storage & Space Estimation",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isInsufficient) SwitchRed else MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+
+                        if (viewModel.isCalculatingStorage) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp,
+                                    color = SwitchBlue
+                                )
+                                Text(
+                                    "Calculating dump size & checking disk space...",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        } else {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("Original Dump Size:", style = MaterialTheme.typography.bodySmall)
+                                Text(
+                                    formatFileSize(viewModel.totalDumpBytes),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    "Estimated .NUP (Level ${viewModel.zstdLevel}):",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                                Text(
+                                    "~${formatFileSize(viewModel.estimatedNupBytes)}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = SwitchBlue
+                                )
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("Available Free Space:", style = MaterialTheme.typography.bodySmall)
+                                Text(
+                                    formatFileSize(viewModel.freeSpaceBytes),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (isInsufficient) SwitchRed else MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+
+                            if (isInsufficient) {
+                                Divider(color = SwitchRed.copy(alpha = 0.3f), thickness = 1.dp)
+                                Text(
+                                    "⚠️ Warning: Your device may run out of storage space! Estimated output (~${formatFileSize(viewModel.estimatedNupBytes)}) plus safe operating buffer exceeds free space (${formatFileSize(viewModel.freeSpaceBytes)}).",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = SwitchRed,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Checkbox(
+                                        checked = viewModel.ignoreStorageWarning,
+                                        onCheckedChange = { viewModel.setIgnoreStorageWarning(it) }
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        "Ignore storage warning and build anyway",
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                            } else if (viewModel.isStorageSufficient == true) {
+                                Divider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 0.5.dp)
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        Icons.Default.CheckCircle,
+                                        contentDescription = null,
+                                        tint = Color(0xFF2E7D32),
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        "Sufficient free space available on destination drive.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Color(0xFF2E7D32),
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            val hasEnoughStorage = viewModel.isStorageSufficient != false || viewModel.ignoreStorageWarning
+            val canBuild = !viewModel.isPacking &&
+                viewModel.folder.isNotEmpty() &&
+                viewModel.titleId.isNotEmpty() &&
+                hasEnoughStorage
+
             // Build Action Button
             Button(
                 onClick = { viewModel.startBuild(context) },
-                enabled = !viewModel.isPacking && viewModel.folder.isNotEmpty() && viewModel.titleId.isNotEmpty(),
+                enabled = canBuild,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(54.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = SwitchBlue)
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (!hasEnoughStorage && viewModel.folder.isNotEmpty()) MaterialTheme.colorScheme.error else SwitchBlue
+                )
             ) {
                 if (viewModel.isPacking) {
                     CircularProgressIndicator(
@@ -469,6 +700,10 @@ fun NUPPackerScreen(viewModel: PackerViewModel = viewModel()) {
                     )
                     Spacer(modifier = Modifier.width(12.dp))
                     Text("Packing NUP...", fontSize = 16.sp)
+                } else if (!hasEnoughStorage && viewModel.folder.isNotEmpty()) {
+                    Icon(Icons.Default.Warning, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Insufficient Storage Space", fontSize = 15.sp, fontWeight = FontWeight.Bold)
                 } else {
                     Icon(Icons.Default.Archive, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
@@ -652,4 +887,12 @@ private fun resolvePathFromUri(context: Context, treeUri: Uri): String? {
         // Fallback
     }
     return null
+}
+
+private fun formatFileSize(bytes: Long): String {
+    if (bytes <= 0L) return "0 B"
+    val units = arrayOf("B", "KB", "MB", "GB", "TB")
+    val digitGroups = (Math.log10(bytes.toDouble()) / Math.log10(1024.0)).toInt().coerceIn(0, units.size - 1)
+    val value = bytes / Math.pow(1024.0, digitGroups.toDouble())
+    return String.format(java.util.Locale.US, "%.2f %s", value, units[digitGroups])
 }
