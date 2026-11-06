@@ -3,6 +3,11 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · Versiona
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-11-06
+
+### Fixed
+- Fixed Kotlin compiler error `Platform declaration clash (setIgnoreStorageWarning(Z)V)` by renaming method to `updateIgnoreStorageWarning`.
+
 ## [0.3.0] - 2026-11-06
 
 ### Added
@@ -45,6 +50,7 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · Versiona
 - GitHub Actions workflows for continuous integration and automated APK compilation.
 - Initial project structure with documentation and governance under AGPL-3.0.
 
+[0.3.1]: https://github.com/nepotira/nuppacker-android/releases/tag/v0.3.1
 [0.3.0]: https://github.com/nepotira/nuppacker-android/releases/tag/v0.3.0
 [0.2.0]: https://github.com/nepotira/nuppacker-android/releases/tag/v0.2.0
 [0.1.1]: https://github.com/nepotira/nuppacker-android/releases/tag/v0.1.1
