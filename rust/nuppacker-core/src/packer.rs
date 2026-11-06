@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use sha2::{Digest, Sha256};
 
-use crate::discovery::{plan_packages, PackerConfig, Pkg};
+use crate::discovery::{plan_packages, PackerConfig};
 use crate::spec::*;
 use crate::tree::{collect, Dir, FileEntry};
 
@@ -159,7 +159,6 @@ where
                 pos += pad as u64;
             }
             let start = pos;
-            let mut hasher = Sha256::new();
             let mut stored_raw = true;
 
             if zstd_level > 0 {
@@ -167,7 +166,6 @@ where
                     let mut fin = File::open(&f.path)?;
                     let mut encoder = zstd::stream::write::Encoder::new(Vec::new(), zstd_level)?;
 
-                    let mut compressed_len = 0usize;
                     let mut f_hasher = Sha256::new();
 
                     loop {
@@ -185,7 +183,7 @@ where
                     }
 
                     let compressed_data = encoder.finish()?;
-                    compressed_len = compressed_data.len();
+                    let compressed_len = compressed_data.len();
 
                     if (compressed_len as u64) < f.size {
                         out.write_all(&compressed_data)?;
@@ -198,7 +196,6 @@ where
 
                 match compress_res {
                     Ok((c_len, hash)) => {
-                        hasher = Sha256::new(); // hash already captured
                         f.sha = hash;
                         if c_len > 0 {
                             stored_raw = false;

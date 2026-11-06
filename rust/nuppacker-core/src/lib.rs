@@ -102,7 +102,7 @@ pub extern "system" fn Java_com_nepo_nuppacker_RustBridge_startBuild(
         }
     };
 
-    let callback_global = match env.new_global_ref(callback) {
+    let callback_global = match env.new_global_ref(&callback) {
         Ok(r) => r,
         Err(e) => {
             notify_error(&mut env, &callback, &format!("Failed creating global callback ref: {}", e));
