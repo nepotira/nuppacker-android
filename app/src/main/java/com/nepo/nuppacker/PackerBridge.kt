@@ -1,9 +1,9 @@
 package com.nepo.nuppacker
 
 import android.content.Context
-import com.chaquo.python.PyObject
 import com.chaquo.python.Python
 import com.chaquo.python.android.AndroidPlatform
+import org.json.JSONObject
 
 interface PackerCallback {
     fun onLog(message: String)
@@ -56,6 +56,8 @@ object PackerBridge {
     ) {
         initPython(context)
         val module = Python.getInstance().getModule("nuppacker")
-        module.callAttr("run_packer_bridge", config, callback)
+        // Serialize to JSON string to prevent Java/Python proxy mismatch (e.g. LinkedHashMap subscript error)
+        val jsonPayload = JSONObject(config).toString()
+        module.callAttr("run_packer_bridge", jsonPayload, callback)
     }
 }

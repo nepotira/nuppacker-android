@@ -33,3 +33,15 @@ Cronológico, mais novo embaixo. Use o modelo da regra `30-documentacao`. Regist
 ## 2026-11-06 01:35 — Publicação da release v0.1.0
 - **Ramo**: `chore/release-0.1.0`
 - **Ações**: Fechamento do CHANGELOG para a versão `0.1.0`, criação da tag anotada `v0.1.0` e publicação da release no GitHub com o APK gerado e checksums SHA-256 anexados.
+
+## 2026-11-06 01:58 — Correção de LinkedHashMap e predefinição de compressão zstd 3
+- **Ramo**: `fix/02-fix-linkedhashmap-and-default-compression`
+- **Sintoma**: `ERROR: 'LinkedHashMap' object is not subscriptable` na inicialização do build (`build_nup` / `plan_packages`).
+- **Causa**: Ao chamar o método Python a partir do Kotlin via Chaquopy passando um `Map`, o Python recebe um proxy de objeto Java (`java.util.LinkedHashMap`) que não suporta o operador de subscrição `obj["key"]`.
+- **Solução**:
+  1. Serialização do payload de configuração para JSON string no Kotlin (`JSONObject(config).toString()`) antes de enviar ao Python.
+  2. Implementação de `_normalize_obj` recursivo no Python para converter quaisquer estruturas Java proxy ou strings JSON em `dict` nativo.
+  3. Predefinição do nível de compressão Zstandard para **3** (padrão recomendado pela especificação NUP para desempenho ideal de descompressão em emuladores).
+  4. Criação automática de diretórios pais do arquivo `.nup` de destino.
+  5. Teste unitário reproduzindo o proxy Java e caminhos com espaços/colchetes.
+- **Evidência**: 6 testes unitários passaram com sucesso (`Ran 6 tests in 0.004s, OK`).

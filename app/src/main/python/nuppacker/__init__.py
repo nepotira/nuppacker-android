@@ -5,6 +5,7 @@ Licensed under GNU AGPL v3.0.
 """
 
 import hashlib
+import json
 import os
 import re
 import struct
@@ -16,6 +17,42 @@ from pathlib import Path
 NO_DIR = 0xFFFFFFFF
 CHUNK = 8 * 1024 * 1024
 align16 = lambda n: (n + 15) & ~15
+
+
+# ----------------------------------------------------------------- bridge helpers
+def _normalize_obj(obj):
+    """
+    Recursively normalizes Java/Kotlin proxies (LinkedHashMap, ArrayList),
+    JSON strings, and native Python data structures into pure Python dicts/lists.
+    Prevents "'LinkedHashMap' object is not subscriptable" errors from Chaquopy.
+    """
+    if obj is None:
+        return None
+    if isinstance(obj, str):
+        s = obj.strip()
+        if (s.startswith("{") and s.endswith("}")) or (s.startswith("[") and s.endswith("]")):
+            try:
+                return _normalize_obj(json.loads(s))
+            except Exception:
+                pass
+        return str(obj)
+    # Java Map proxy (entrySet / items)
+    if hasattr(obj, "entrySet"):
+        out = {}
+        for entry in obj.entrySet():
+            k = str(entry.getKey())
+            out[k] = _normalize_obj(entry.getValue())
+        return out
+    if hasattr(obj, "items"):
+        return {str(k): _normalize_obj(v) for k, v in obj.items()}
+    # Java Collection proxy (toArray)
+    if hasattr(obj, "toArray"):
+        return [_normalize_obj(x) for x in obj.toArray()]
+    if isinstance(obj, (list, tuple)):
+        return [_normalize_obj(x) for x in obj]
+    if isinstance(obj, (int, float, bool)):
+        return obj
+    return obj
 
 
 # ----------------------------------------------------------------- tree model
@@ -122,12 +159,28 @@ ver_str = lambda v: f"{v >> 16}.{(v >> 8) & 0xFF}.{v & 0xFF}"
 
 
 def plan_packages(cfg, log):
-    tid = int(cfg["title_id"], 16)
-    specs = discover(Path(cfg["folder"]))
-    if cfg.get("update"):
-        specs += [(1, None, v, p) for v, p in version_dirs(Path(cfg["update"]))]
-    if cfg.get("dlc"):
-        specs += discover_dlc(Path(cfg["dlc"]))
+    cfg = _normalize_obj(cfg)
+    raw_tid = str(cfg.get("title_id", "")).strip()
+    if raw_tid.lower().startswith("0x"):
+        raw_tid = raw_tid[2:]
+    if not raw_tid:
+        raise ValueError("Title ID is required.")
+    try:
+        tid = int(raw_tid, 16)
+    except ValueError:
+        raise ValueError(f"Invalid Title ID '{raw_tid}': must be a 16-hex-digit number (e.g. 0400C3F00006E000)")
+
+    folder_path = Path(str(cfg["folder"]).strip())
+    specs = discover(folder_path)
+
+    update_opt = cfg.get("update")
+    if update_opt and Path(str(update_opt).strip()).is_dir():
+        specs += [(1, None, v, p) for v, p in version_dirs(Path(str(update_opt).strip()))]
+
+    dlc_opt = cfg.get("dlc")
+    if dlc_opt and Path(str(dlc_opt).strip()).is_dir():
+        specs += discover_dlc(Path(str(dlc_opt).strip()))
+
     if not specs:
         raise ValueError(
             "No packages found: expected base/, update/<version>/, dlc/<titleid>/ "
@@ -165,9 +218,9 @@ def plan_packages(cfg, log):
         kind, ptid, ver, path = s
         meta = b""
         if kind == 0 or (not has_base and s is best_update):  # app-level metadata
-            meta += app_meta(cfg, path)
+            meta += app_meta(cfg, path, log)
         if cfg.get("display_version") and s is disp_target:
-            meta += tlv(0x0004, cfg["display_version"].encode())
+            meta += tlv(0x0004, str(cfg["display_version"]).encode("utf-8"))
         pkgs.append(
             Pkg(path, kind, ptid, ver, 1 if (kind == 1 and not has_base) else 0, meta)
         )
@@ -184,9 +237,9 @@ def loc_block(items):
     for lang, data in items:
         l = lang.strip().lower()
         if not l or l in seen:
-            raise ValueError(f"Empty or duplicate language tag: {lang!r}")
+            continue
         seen.add(l)
-        lb = l.encode()
+        lb = l.encode("utf-8")
         out += bytes([len(lb)]) + lb + struct.pack("<I", len(data)) + data
     return out
 
@@ -199,26 +252,38 @@ def sha256_file(p):
     return h.digest()
 
 
-def app_meta(cfg, base_dir):
+def app_meta(cfg, base_dir, log=print):
     m = b""
 
-    if cfg.get("nacp"):
-        m += tlv(0x0002, Path(cfg["nacp"]).read_bytes())
-    if cfg.get("icon"):
-        m += tlv(0x0003, Path(cfg["icon"]).read_bytes())
+    nacp_path = cfg.get("nacp")
+    if nacp_path and Path(str(nacp_path)).is_file():
+        m += tlv(0x0002, Path(str(nacp_path)).read_bytes())
+
+    icon_path = cfg.get("icon")
+    if icon_path and Path(str(icon_path)).is_file():
+        m += tlv(0x0003, Path(str(icon_path)).read_bytes())
+
     if cfg.get("title"):
-        m += tlv(0x0005, cfg["title"].encode())
+        m += tlv(0x0005, str(cfg["title"]).encode("utf-8"))
+
     if cfg.get("publisher"):
-        m += tlv(0x0006, cfg["publisher"].encode())
+        m += tlv(0x0006, str(cfg["publisher"]).encode("utf-8"))
+
     if base_dir and (base_dir / "exefs" / "main").is_file():
         m += tlv(0x0007, sha256_file(base_dir / "exefs" / "main"))
-    m += tlv(0x0008, Path(cfg["folder"]).name.encode())
-    if cfg.get("loc_titles"):
-        m += tlv(0x0009, loc_block([(l, t.encode()) for l, t in cfg["loc_titles"]]))
-    if cfg.get("loc_icons"):
-        m += tlv(
-            0x000A, loc_block([(l, Path(p).read_bytes()) for l, p in cfg["loc_icons"]])
-        )
+
+    folder_name = Path(str(cfg["folder"])).name
+    m += tlv(0x0008, folder_name.encode("utf-8"))
+
+    loc_titles = cfg.get("loc_titles")
+    if loc_titles and isinstance(loc_titles, (list, tuple)):
+        valid_items = []
+        for item in loc_titles:
+            if isinstance(item, (list, tuple)) and len(item) >= 2 and item[0] and item[1]:
+                valid_items.append((str(item[0]).strip(), str(item[1]).strip().encode("utf-8")))
+        if valid_items:
+            m += tlv(0x0009, loc_block(valid_items))
+
     return m
 
 
@@ -238,7 +303,13 @@ def guess_title_id(folder: Path):
     """Best-effort read of the program id from main.npdm (ACI0). Switch 1 layout assumed."""
     try:
         folder = Path(folder)
-        d = (folder / "exefs" / "main.npdm").read_bytes()
+        npdm_path = folder / "exefs" / "main.npdm"
+        if not npdm_path.is_file():
+            # If folder itself has main.npdm
+            npdm_path = folder / "main.npdm"
+        if not npdm_path.is_file():
+            return ""
+        d = npdm_path.read_bytes()
         if d[:4] != b"META":
             return ""
         aci0 = struct.unpack_from("<I", d, 0x70)[0]
@@ -272,6 +343,7 @@ class Pkg:
 
 # ----------------------------------------------------------------- builder
 def build_nup(cfg, log=print, progress=lambda p: None):
+    cfg = _normalize_obj(cfg)
     pkgs = plan_packages(cfg, log)
     log("Packages: " + ", ".join("base" if p.kind == 0 else "update" for p in pkgs))
 
@@ -286,8 +358,8 @@ def build_nup(cfg, log=print, progress=lambda p: None):
     for d in dirs:
         d.first = len(children)
         nodes = sorted(
-            [(s.name.encode(), s.idx) for s in d.dirs]
-            + [(f.name.encode(), D + f.idx) for f in d.files]
+            [(s.name.encode("utf-8"), s.idx) for s in d.dirs]
+            + [(f.name.encode("utf-8"), D + f.idx) for f in d.files]
         )
         children += [i for _, i in nodes]
         d.count = len(nodes)
@@ -296,7 +368,7 @@ def build_nup(cfg, log=print, progress=lambda p: None):
 
     def intern(s):
         if s not in pmap:
-            b = s.encode()
+            b = s.encode("utf-8")
             pmap[s] = (len(pool), len(b))
             pool.extend(b)
 
@@ -316,16 +388,20 @@ def build_nup(cfg, log=print, progress=lambda p: None):
     blob_off = pos
 
     cctx = None
-    if cfg.get("zstd", 0) > 0:
+    zstd_level = int(cfg.get("zstd", 3))
+    if zstd_level > 0:
         try:
             import zstandard
-            cctx = zstandard.ZstdCompressor(level=cfg["zstd"])
-        except ImportError:
-            log("Warning: zstandard package not found, proceeding without compression")
+            cctx = zstandard.ZstdCompressor(level=zstd_level)
+        except Exception as e:
+            log(f"Warning: zstandard error ({e}), proceeding without compression")
             cctx = None
 
     done = 0
-    part = cfg["output"] + ".part"
+    out_target = str(cfg["output"])
+    part = out_target + ".part"
+    Path(part).parent.mkdir(parents=True, exist_ok=True)
+
     with open(part, "wb") as out:
         out.seek(blob_off)
         seen = {}
@@ -344,18 +420,25 @@ def build_nup(cfg, log=print, progress=lambda p: None):
             h = hashlib.sha256()
             stored_raw = True
             if cctx:
-                with open(f.path, "rb") as fin:  # pass 1: hash
-                    while chunk := fin.read(CHUNK):
-                        h.update(chunk)
-                with open(f.path, "rb") as fin:  # pass 2: compress
-                    cctx.copy_stream(fin, out, size=f.size)
-                csize = out.tell() - start
-                if csize < f.size:
-                    stored_raw, f.codec, f.esize = False, 1, csize
-                    done += f.size
-                else:  # not smaller -> store raw
+                try:
+                    with open(f.path, "rb") as fin:  # pass 1: hash
+                        while chunk := fin.read(CHUNK):
+                            h.update(chunk)
+                    with open(f.path, "rb") as fin:  # pass 2: compress
+                        cctx.copy_stream(fin, out, size=f.size)
+                    csize = out.tell() - start
+                    if csize < f.size:
+                        stored_raw, f.codec, f.esize = False, 1, csize
+                        done += f.size
+                    else:  # not smaller -> store raw
+                        out.seek(start)
+                        out.truncate()
+                except Exception as ce:
+                    log(f"Compression error on {f.path.name} ({ce}); storing raw")
                     out.seek(start)
                     out.truncate()
+                    stored_raw = True
+
             if stored_raw:
                 f.codec = 0
                 with open(f.path, "rb") as fin:
@@ -461,14 +544,14 @@ def build_nup(cfg, log=print, progress=lambda p: None):
                 out.seek(p.meta_off)
                 out.write(p.meta)
         out.truncate(file_size)
-    os.replace(part, cfg["output"])
-    log(f"Done: {cfg['output']} ({file_size / 1e9:.2f} GB)")
+    os.replace(part, out_target)
+    log(f"Done: {out_target} ({file_size / 1e9:.2f} GB)")
 
 
 # ----------------------------------------------------------------- Android Bridge
 def auto_detect_title_id(folder_path: str) -> str:
     """Helper for Android Kotlin UI to auto-detect title ID."""
-    folder = Path(folder_path)
+    folder = Path(str(folder_path).strip())
     specs = discover(folder)
     path = specs[0][3] if specs else None
     return guess_title_id(path) if path else ""
@@ -477,7 +560,7 @@ def auto_detect_title_id(folder_path: str) -> str:
 def discover_summary(folder_path: str) -> list:
     """Helper for Android Kotlin UI to preview discovered packages."""
     out = []
-    for k, t, v, p in discover(Path(folder_path)):
+    for k, t, v, p in discover(Path(str(folder_path).strip())):
         out.append({
             "kind": KIND_NAMES.get(k, "unknown"),
             "version": v,
@@ -486,10 +569,11 @@ def discover_summary(folder_path: str) -> list:
     return out
 
 
-def run_packer_bridge(cfg_dict, callback=None):
+def run_packer_bridge(cfg_input, callback=None):
     """
     Bridge entrypoint called by Chaquopy / Android Kotlin background thread.
-    callback can have onLog(msg) and onProgress(val) methods.
+    Normalizes Java Map proxies, JSON strings, or dicts to pure Python dicts.
+    callback can have onLog(msg), onProgress(val), onSuccess(), onError(err, tb) methods.
     """
     def _log(msg):
         if callback and hasattr(callback, "onLog"):
@@ -502,7 +586,8 @@ def run_packer_bridge(cfg_dict, callback=None):
             callback.onProgress(float(val))
 
     try:
-        build_nup(cfg_dict, _log, _prog)
+        cfg = _normalize_obj(cfg_input)
+        build_nup(cfg, _log, _prog)
         if callback and hasattr(callback, "onSuccess"):
             callback.onSuccess()
     except Exception as e:

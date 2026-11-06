@@ -265,8 +265,13 @@ fun NUPPackerScreen(viewModel: PackerViewModel = viewModel()) {
             // Compression Card
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
+                    val levelLabel = when (viewModel.zstdLevel) {
+                        0 -> "0 (raw / uncompressed)"
+                        3 -> "3 (Recommended for emulators)"
+                        else -> "${viewModel.zstdLevel}"
+                    }
                     Text(
-                        "Zstandard Compression Level: ${if (viewModel.zstdLevel == 0) "0 (raw / store)" else viewModel.zstdLevel.toString()}",
+                        "Zstandard Compression Level: $levelLabel",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold
                     )
@@ -278,7 +283,7 @@ fun NUPPackerScreen(viewModel: PackerViewModel = viewModel()) {
                         modifier = Modifier.fillMaxWidth()
                     )
                     Text(
-                        "0 stores files without compression (fastest). Levels 1-3 provide good balance on mobile devices.",
+                        "Level 3 is the standard NUP format recommendation for emulators (fast streaming & decompression). Level 0 stores uncompressed (raw).",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
