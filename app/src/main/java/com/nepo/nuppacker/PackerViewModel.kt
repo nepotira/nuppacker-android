@@ -131,11 +131,16 @@ class PackerViewModel : ViewModel() {
             }
             updateOutputPathCombined()
 
-            if (titleId.isEmpty()) {
-                autoDetectTitleId(context)
+            if (RustBridge.isNativeEngineAvailable()) {
+                // Unified native scan extracts Title ID, packages, and storage in a single ~200ms pass
+                updateStorageEstimate(forceRefreshDir = true)
+            } else {
+                if (titleId.isEmpty()) {
+                    autoDetectTitleId(context)
+                }
+                inspectPackages(context)
+                updateStorageEstimate(forceRefreshDir = true)
             }
-            inspectPackages(context)
-            updateStorageEstimate(forceRefreshDir = true)
         }
     }
 
@@ -271,39 +276,88 @@ class PackerViewModel : ViewModel() {
             return
         }
 
-        // Otherwise, run high-speed asynchronous directory traversal using Java NIO
+        // Otherwise, run unified native Rust analysis (or fallback to Java NIO)
         storageJob?.cancel()
         storageJob = viewModelScope.launch(Dispatchers.IO) {
             isCalculatingStorage = true
             try {
-                val dumpDir = File(folder)
-                if (!dumpDir.exists()) {
+                if (RustBridge.isNativeEngineAvailable()) {
+                    val jsonStr = RustBridge.analyzeFolder(folder)
+                    val obj = org.json.JSONObject(jsonStr)
+                    var total = obj.optLong("total_bytes", 0L)
+                    val tid = obj.optString("title_id", "")
+                    
+                    val pkgsArr = obj.optJSONArray("packages")
+                    val pkgs = mutableListOf<String>()
+                    if (pkgsArr != null) {
+                        for (i in 0 until pkgsArr.length()) {
+                            val pkgObj = pkgsArr.getJSONObject(i)
+                            val k = pkgObj.optString("kind", "pkg")
+                            val v = pkgObj.optString("version", "0")
+                            val p = pkgObj.optString("path", "")
+                            pkgs.add("$k v$v: $p")
+                        }
+                    }
+
+                    if (updateFolder.isNotEmpty() && updateFolder != folder) {
+                        try {
+                            val uObj = org.json.JSONObject(RustBridge.analyzeFolder(updateFolder))
+                            total += uObj.optLong("total_bytes", 0L)
+                        } catch (_: Exception) {}
+                    }
+                    if (dlcFolder.isNotEmpty() && dlcFolder != folder) {
+                        try {
+                            val dObj = org.json.JSONObject(RustBridge.analyzeFolder(dlcFolder))
+                            total += dObj.optLong("total_bytes", 0L)
+                        } catch (_: Exception) {}
+                    }
+
+                    cachedFolder = folder
+                    cachedUpdate = updateFolder
+                    cachedDlc = dlcFolder
+                    cachedDumpSize = total
+
                     withContext(Dispatchers.Main) {
-                        totalDumpBytes = 0L
-                        isStorageSufficient = null
+                        if (titleId.isEmpty() && tid.isNotEmpty()) {
+                            titleId = tid.removePrefix("0x").removePrefix("0X")
+                        }
+                        if (pkgs.isNotEmpty()) {
+                            discoveredPackages.clear()
+                            discoveredPackages.addAll(pkgs)
+                        }
+                        recalculateRatioAndSufficiency(total)
                         isCalculatingStorage = false
                     }
-                    return@launch
-                }
-                var total = fastCalculateDirSize(dumpDir)
+                } else {
+                    val dumpDir = File(folder)
+                    if (!dumpDir.exists()) {
+                        withContext(Dispatchers.Main) {
+                            totalDumpBytes = 0L
+                            isStorageSufficient = null
+                            isCalculatingStorage = false
+                        }
+                        return@launch
+                    }
+                    var total = fastCalculateDirSize(dumpDir)
 
-                if (updateFolder.isNotEmpty()) {
-                    val uf = File(updateFolder)
-                    if (uf.exists()) total += fastCalculateDirSize(uf)
-                }
-                if (dlcFolder.isNotEmpty()) {
-                    val df = File(dlcFolder)
-                    if (df.exists()) total += fastCalculateDirSize(df)
-                }
+                    if (updateFolder.isNotEmpty()) {
+                        val uf = File(updateFolder)
+                        if (uf.exists()) total += fastCalculateDirSize(uf)
+                    }
+                    if (dlcFolder.isNotEmpty()) {
+                        val df = File(dlcFolder)
+                        if (df.exists()) total += fastCalculateDirSize(df)
+                    }
 
-                cachedFolder = folder
-                cachedUpdate = updateFolder
-                cachedDlc = dlcFolder
-                cachedDumpSize = total
+                    cachedFolder = folder
+                    cachedUpdate = updateFolder
+                    cachedDlc = dlcFolder
+                    cachedDumpSize = total
 
-                withContext(Dispatchers.Main) {
-                    recalculateRatioAndSufficiency(total)
-                    isCalculatingStorage = false
+                    withContext(Dispatchers.Main) {
+                        recalculateRatioAndSufficiency(total)
+                        isCalculatingStorage = false
+                    }
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {

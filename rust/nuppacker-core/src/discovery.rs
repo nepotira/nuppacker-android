@@ -38,6 +38,21 @@ pub struct Pkg {
     pub meta_off: u64,
 }
 
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+pub struct FolderAnalysis {
+    pub total_bytes: u64,
+    pub file_count: u64,
+    pub title_id: String,
+    pub packages: Vec<DiscoveredPackage>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+pub struct DiscoveredPackage {
+    pub kind: String,
+    pub version: String,
+    pub path: String,
+}
+
 pub fn is_pkg_dir(p: &Path) -> bool {
     p.is_dir() && (p.join("exefs").is_dir() || p.join("romfs").is_dir() || p.join("data").is_dir())
 }
@@ -406,4 +421,59 @@ where
     }
 
     Ok(pkgs)
+}
+
+pub fn analyze_folder(folder: &Path) -> FolderAnalysis {
+    let mut total_bytes = 0u64;
+    let mut file_count = 0u64;
+    let mut title_id = String::new();
+
+    let direct_tid = guess_title_id(folder);
+    if !direct_tid.is_empty() {
+        title_id = direct_tid;
+    }
+
+    for entry in walkdir::WalkDir::new(folder)
+        .min_depth(1)
+        .into_iter()
+        .filter_entry(|e| {
+            let name = e.file_name().to_string_lossy();
+            !name.ends_with(".nup") && !name.ends_with(".part") && !name.starts_with('.')
+        })
+        .filter_map(|e| e.ok())
+    {
+        if entry.file_type().is_file() {
+            let name = entry.file_name().to_string_lossy();
+            if !name.ends_with(".nup") && !name.ends_with(".part") {
+                if let Ok(meta) = entry.metadata() {
+                    total_bytes += meta.len();
+                    file_count += 1;
+                }
+            }
+        }
+    }
+
+    let specs = discover(folder);
+    let mut packages = Vec::new();
+    let kind_names = ["base", "update", "dlc"];
+    for (kind, _tid, ver, p) in specs {
+        if title_id.is_empty() {
+            let tid = guess_title_id(&p);
+            if !tid.is_empty() {
+                title_id = tid;
+            }
+        }
+        packages.push(DiscoveredPackage {
+            kind: kind_names.get(kind as usize).unwrap_or(&"unknown").to_string(),
+            version: ver.map(ver_str).unwrap_or_else(|| "0".to_string()),
+            path: p.to_string_lossy().to_string(),
+        });
+    }
+
+    FolderAnalysis {
+        total_bytes,
+        file_count,
+        title_id,
+        packages,
+    }
 }

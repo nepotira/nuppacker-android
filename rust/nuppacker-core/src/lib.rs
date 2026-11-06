@@ -13,7 +13,7 @@ use jni::objects::{JClass, JObject, JString, JValue};
 use jni::sys::{jint, jstring};
 use jni::JNIEnv;
 
-use crate::discovery::{discover, guess_title_id, PackerConfig};
+use crate::discovery::{analyze_folder, discover, guess_title_id, PackerConfig};
 use crate::packer::build_nup;
 
 // Global cancellation flag for cooperative cancellation
@@ -65,6 +65,22 @@ pub extern "system" fn Java_com_nepo_nuppacker_RustBridge_discoverSummary(
         .collect();
 
     let json_str = serde_json::to_string(&items).unwrap_or_else(|_| "[]".to_string());
+    env.new_string(json_str).unwrap().into_raw()
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_nepo_nuppacker_RustBridge_analyzeFolder(
+    mut env: JNIEnv,
+    _class: JClass,
+    folder_path: JString,
+) -> jstring {
+    let folder_str: String = match env.get_string(&folder_path) {
+        Ok(s) => s.into(),
+        Err(_) => return env.new_string("{}").unwrap().into_raw(),
+    };
+    let path = Path::new(folder_str.trim());
+    let analysis = analyze_folder(path);
+    let json_str = serde_json::to_string(&analysis).unwrap_or_else(|_| "{}".to_string());
     env.new_string(json_str).unwrap().into_raw()
 }
 

@@ -10,6 +10,59 @@ use crate::discovery::{plan_packages, PackerConfig};
 use crate::spec::*;
 use crate::tree::{collect, Dir, FileEntry};
 
+/// Returns true if file extension is already known to be compressed,
+/// multimedia, or encrypted format where Zstd gives no compression benefit.
+pub fn is_incompressible_ext(path: &Path) -> bool {
+    if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+        let ext_lower = ext.to_ascii_lowercase();
+        matches!(
+            ext_lower.as_str(),
+            "mp4" | "webm" | "bik" | "m4v" | "mkv" | "avi" |
+            "jpg" | "jpeg" | "png" | "webp" | "gif" |
+            "zip" | "gz" | "xz" | "zst" | "7z" | "rar" |
+            "astc" | "bntx" | "dds" | "ktx" | "ktx2" |
+            "opus" | "ogg" | "mp3" | "aac" | "wav" | "flac" |
+            "szs" | "sarc" | "nca" | "nup" | "nsz" | "xcz"
+        )
+    } else {
+        false
+    }
+}
+
+/// Fast Shannon entropy probe on small sample (16 KB).
+/// Returns entropy between 0.0 (uniform) and 8.0 (completely random / compressed).
+pub fn fast_entropy_probe(sample: &[u8]) -> f64 {
+    if sample.is_empty() {
+        return 0.0;
+    }
+    let mut counts = [0u32; 256];
+    for &b in sample {
+        counts[b as usize] += 1;
+    }
+    let len = sample.len() as f64;
+    let mut entropy = 0.0f64;
+    for &c in &counts {
+        if c > 0 {
+            let p = (c as f64) / len;
+            entropy -= p * p.log2();
+        }
+    }
+    entropy
+}
+
+/// Detects optimal thread count for mobile ARM big.LITTLE CPUs
+/// to avoid overheating the Prime (Cortex-X) core and prevent thermal throttling.
+pub fn optimal_thread_count() -> u32 {
+    let cpus = std::thread::available_parallelism()
+        .map(|n| n.get() as u32)
+        .unwrap_or(4);
+    if cpus <= 4 {
+        std::cmp::max(cpus, 2)
+    } else {
+        std::cmp::min(cpus / 2 + 1, 4)
+    }
+}
+
 pub fn build_nup<L, P>(
     cfg: &PackerConfig,
     log: L,
@@ -161,10 +214,36 @@ where
             let start = pos;
             let mut stored_raw = true;
 
-            if zstd_level > 0 {
+            let mut skip_compression = zstd_level == 0 || is_incompressible_ext(Path::new(&f.name));
+            if !skip_compression && f.size > (128 * 1024) {
+                if let Ok(mut probe_file) = File::open(&f.path) {
+                    let mut probe_buf = vec![0u8; 16 * 1024];
+                    if let Ok(n) = probe_file.read(&mut probe_buf) {
+                        if n >= 4096 && fast_entropy_probe(&probe_buf[..n]) > 7.75 {
+                            skip_compression = true;
+                        }
+                    }
+                }
+            }
+
+            if !skip_compression {
                 let compress_res = (|| -> Result<(usize, [u8; 32]), std::io::Error> {
                     let mut fin = File::open(&f.path)?;
+                    #[cfg(any(target_os = "android", target_os = "linux"))]
+                    {
+                        use std::os::unix::io::AsRawFd;
+                        unsafe {
+                            libc::posix_fadvise(
+                                fin.as_raw_fd(),
+                                0,
+                                f.size as libc::off_t,
+                                libc::POSIX_FADV_SEQUENTIAL | libc::POSIX_FADV_WILLNEED,
+                            );
+                        }
+                    }
+
                     let mut encoder = zstd::stream::write::Encoder::new(Vec::new(), zstd_level)?;
+                    let _ = encoder.multithread(optimal_thread_count());
 
                     let mut f_hasher = Sha256::new();
 
@@ -180,6 +259,14 @@ where
                         
                         // Stream into encoder buffer
                         encoder.write_all(&read_buf[..n])?;
+                    }
+
+                    #[cfg(any(target_os = "android", target_os = "linux"))]
+                    {
+                        use std::os::unix::io::AsRawFd;
+                        unsafe {
+                            libc::posix_fadvise(fin.as_raw_fd(), 0, 0, libc::POSIX_FADV_DONTNEED);
+                        }
                     }
 
                     let compressed_data = encoder.finish()?;
@@ -218,6 +305,18 @@ where
             if stored_raw {
                 f.codec = 0;
                 let mut fin = File::open(&f.path).map_err(|e| format!("Failed to open {}: {}", f.name, e))?;
+                #[cfg(any(target_os = "android", target_os = "linux"))]
+                {
+                    use std::os::unix::io::AsRawFd;
+                    unsafe {
+                        libc::posix_fadvise(
+                            fin.as_raw_fd(),
+                            0,
+                            f.size as libc::off_t,
+                            libc::POSIX_FADV_SEQUENTIAL | libc::POSIX_FADV_WILLNEED,
+                        );
+                    }
+                }
                 let mut f_hasher = Sha256::new();
                 loop {
                     if cancelled.load(Ordering::Relaxed) {
@@ -229,6 +328,13 @@ where
                     }
                     f_hasher.update(&read_buf[..n]);
                     out.write_all(&read_buf[..n]).map_err(|e| e.to_string())?;
+                }
+                #[cfg(any(target_os = "android", target_os = "linux"))]
+                {
+                    use std::os::unix::io::AsRawFd;
+                    unsafe {
+                        libc::posix_fadvise(fin.as_raw_fd(), 0, 0, libc::POSIX_FADV_DONTNEED);
+                    }
                 }
                 f.sha = f_hasher.finalize().into();
                 f.esize = f.size;
