@@ -31,6 +31,9 @@ object RustBridge {
     external fun discoverSummary(folderPath: String): String
 
     @JvmStatic
+    external fun analyzeFolder(folderPath: String): String
+
+    @JvmStatic
     external fun startBuild(jsonConfig: String, callback: RustCallback): Int
 
     @JvmStatic

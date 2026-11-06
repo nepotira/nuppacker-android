@@ -4,8 +4,8 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use tempfile::TempDir;
 
-use crate::discovery::{parse_ver, ver_str, PackerConfig};
-use crate::packer::build_nup;
+use crate::discovery::{analyze_folder, parse_ver, ver_str, PackerConfig};
+use crate::packer::{build_nup, fast_entropy_probe, is_incompressible_ext};
 use crate::spec::*;
 
 #[test]
@@ -90,4 +90,46 @@ fn test_synthetic_nup_build_and_superblock() {
 
     let toc_size = u64::from_le_bytes(header[16..24].try_into().unwrap());
     assert!(toc_size > 0 && toc_size % 16 == 0, "TOC size must be aligned to 16 bytes");
+}
+
+#[test]
+fn test_incompressible_ext() {
+    use std::path::Path;
+    assert!(is_incompressible_ext(Path::new("video.mp4")));
+    assert!(is_incompressible_ext(Path::new("texture.astc")));
+    assert!(is_incompressible_ext(Path::new("archive.szs")));
+    assert!(is_incompressible_ext(Path::new("audio.opus")));
+    assert!(!is_incompressible_ext(Path::new("main.npdm")));
+    assert!(!is_incompressible_ext(Path::new("code.bin")));
+}
+
+#[test]
+fn test_entropy_probe() {
+    // Low entropy (uniform zeros)
+    let uniform = vec![0u8; 1024];
+    assert!(fast_entropy_probe(&uniform) < 0.1);
+
+    // High entropy (simulated random bytes)
+    let mut random = Vec::with_capacity(256 * 10);
+    for _ in 0..10 {
+        for b in 0..=255u8 {
+            random.push(b);
+        }
+    }
+    assert!(fast_entropy_probe(&random) > 7.9);
+}
+
+#[test]
+fn test_analyze_folder() {
+    let temp_dir = TempDir::new().unwrap();
+    let folder = temp_dir.path().join("dump");
+    let exefs = folder.join("exefs");
+    fs::create_dir_all(&exefs).unwrap();
+    fs::write(exefs.join("main"), b"TEST_BINARY").unwrap();
+
+    let analysis = analyze_folder(&folder);
+    assert_eq!(analysis.file_count, 1);
+    assert_eq!(analysis.total_bytes, 11);
+    assert_eq!(analysis.packages.len(), 1);
+    assert_eq!(analysis.packages[0].kind, "base");
 }
