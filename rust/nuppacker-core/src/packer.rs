@@ -243,10 +243,7 @@ where
                     }
 
                     let mut encoder = zstd::stream::write::Encoder::new(Vec::new(), zstd_level)?;
-                    #[cfg(feature = "zstdmt")]
-                    {
-                        let _ = encoder.multithread(optimal_thread_count());
-                    }
+                    let _ = encoder.multithread(optimal_thread_count());
 
                     let mut f_hasher = Sha256::new();
 
