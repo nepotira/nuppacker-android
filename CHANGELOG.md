@@ -3,6 +3,16 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · Versiona
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-06
+
+### Added
+- **High-Performance Single-Pass Streaming Engine**: Overhauled file processing to simultaneously hash SHA-256 and compress Zstandard in a single read pass, cutting disk I/O time in half and eliminating redundant double-reads.
+- **Multi-threaded Zstandard**: Added multi-core thread scaling (`threads = min(cores, 8)`) for high-speed compression on modern Android multi-core CPUs.
+- **Foreground Service & ZArchiver-style Notification**: Persistent background operation (`PackerForegroundService`) with Wakelock, real-time progress bar, status, and cancel action right in the notification shade.
+- **Battery Optimization & OEM Management**: Added battery optimization whitelist integration with custom detection and guidance for HyperOS / MIUI, Samsung One UI, Motorola Moto UI, and pure AOSP.
+- **Cancellation Button**: Added "Cancel Build" button both on the UI and inside the ongoing notification, with immediate cleanup of partial files (`.part`).
+- **Output Directory Picker**: Added dedicated folder picker button for the destination `.nup` file, maintaining the file name while allowing easy directory selection.
+
 ## [0.1.1] - 2026-11-06
 
 ### Fixed
@@ -24,5 +34,6 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · Versiona
 - GitHub Actions workflows for continuous integration and automated APK compilation.
 - Initial project structure with documentation and governance under AGPL-3.0.
 
+[0.2.0]: https://github.com/nepotira/nuppacker-android/releases/tag/v0.2.0
 [0.1.1]: https://github.com/nepotira/nuppacker-android/releases/tag/v0.1.1
 [0.1.0]: https://github.com/nepotira/nuppacker-android/releases/tag/v0.1.0

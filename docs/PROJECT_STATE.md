@@ -1,5 +1,5 @@
 # Estado do projeto — nuppacker-android
-Atualizado em: 2026-11-06 01:58 por Gemini 3.8 Flash · Versão atual: 0.1.1 · Ramo: fix/02-fix-linkedhashmap-and-default-compression
+Atualizado em: 2026-11-06 02:20 por Gemini 3.8 Flash · Versão atual: 0.2.0 · Ramo: feat/03-high-performance-engine-and-background-service
 
 ## Objetivo
 Empacotar e gerenciar dumps de Switch 1/2 no formato `.nup` diretamente no Android, preservando a lógica original do NUPPacker Python.

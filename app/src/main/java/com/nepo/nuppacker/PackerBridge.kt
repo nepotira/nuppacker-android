@@ -9,15 +9,28 @@ interface PackerCallback {
     fun onLog(message: String)
     fun onProgress(ratio: Float)
     fun onSuccess()
+    fun onCancelled()
     fun onError(error: String, traceback: String)
+    fun isCancelled(): Boolean
 }
 
 object PackerBridge {
+
+    @Volatile
+    var isCancellationRequested = false
 
     fun initPython(context: Context) {
         if (!Python.isStarted()) {
             Python.start(AndroidPlatform(context.applicationContext))
         }
+    }
+
+    fun cancelActiveBuild() {
+        isCancellationRequested = true
+    }
+
+    fun resetCancellation() {
+        isCancellationRequested = false
     }
 
     fun autoDetectTitleId(context: Context, folderPath: String): String {
@@ -55,8 +68,8 @@ object PackerBridge {
         callback: PackerCallback
     ) {
         initPython(context)
+        resetCancellation()
         val module = Python.getInstance().getModule("nuppacker")
-        // Serialize to JSON string to prevent Java/Python proxy mismatch (e.g. LinkedHashMap subscript error)
         val jsonPayload = JSONObject(config).toString()
         module.callAttr("run_packer_bridge", jsonPayload, callback)
     }

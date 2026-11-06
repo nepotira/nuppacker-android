@@ -45,3 +45,14 @@ Cronológico, mais novo embaixo. Use o modelo da regra `30-documentacao`. Regist
   4. Criação automática de diretórios pais do arquivo `.nup` de destino.
   5. Teste unitário reproduzindo o proxy Java e caminhos com espaços/colchetes.
 - **Evidência**: 6 testes unitários passaram com sucesso (`Ran 6 tests in 0.004s, OK`).
+
+## 2026-11-06 02:20 — Reestruturação de performance e Foreground Service estilo ZArchiver (v0.2.0)
+- **Ramo**: `feat/03-high-performance-engine-and-background-service`
+- **Ações**:
+  1. **Motor Single-Pass**: Eliminação do double-read de arquivos. O arquivo agora é lido uma única vez, sendo calculado o SHA-256 e comprimido com `zstandard` em streaming contínuo.
+  2. **Multi-threading Zstandard**: Habilitado suporte a múltiplos núcleos de CPU (`threads = min(os.cpu_count() or 4, 8)`) para acelerar a compressão em chips ARM modernos.
+  3. **Foreground Service & Notificação persistente**: Implementado `PackerForegroundService` com `PARTIAL_WAKE_LOCK`, canal de notificações, barra de progresso em tempo real e ação de Cancelar diretamente na central de notificações como no ZArchiver.
+  4. **Otimização de Bateria e OEM**: Integração com `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` e detecção de ambientes OEM (HyperOS/MIUI, Samsung One UI, Moto UI, AOSP puro).
+  5. **Botão de Cancelamento**: Adicionado botão "Cancel Build" na UI e na notificação com deleção imediata do arquivo parcial `.part`.
+  6. **Seletor de pasta de saída**: Adicionado botão de navegação para a pasta do arquivo `.nup` de destino.
+- **Evidência**: 7 testes unitários passando em 0.003s.
