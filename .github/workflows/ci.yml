@@ -3,11 +3,20 @@ on:
   pull_request:
   push:
     branches: [main]
+
 jobs:
-  verificar:
+  test:
+    name: Unit Tests & Verification
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      # TODO: adicionar setup da stack (node/php/python) e os comandos do AGENTS.md
-      - name: Testar
-        run: echo "defina o comando de teste do projeto"
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run Python unit tests
+        run: |
+          python3 -m unittest discover tests
