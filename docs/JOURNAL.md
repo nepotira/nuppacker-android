@@ -173,3 +173,13 @@ Cronológico, mais novo embaixo. Use o modelo da regra `30-documentacao`. Regist
   5. **Varredura Direcionada**: A análise de pastas percorre diretamente as raízes dos pacotes descobertos, evitando percursos redundantes.
   6. **Bumping de Versão**: Atualizado para SemVer `0.5.1` (versionCode 12).
 - **Evidência**: Testes unitários Python passando (`7 tests OK`) e novo teste Rust `test_small_file_raw_fallback_and_compression` adicionado.
+
+## 2026-11-07 06:20 — Fim do Congelamento da UI por IPC e Limpeza Garantida do .part (v0.5.2)
+- **Ramo**: `fix/16-ui-throttling-and-cancellation-cleanup`
+- **Contexto**: Relato de congelamento total da interface do app durante empacotamento com notificação ativa e persistência do arquivo temporário `.nup.part` no armazenamento após cancelamento do usuário.
+- **Ações**:
+  1. **Rate-limiting de Progresso**: Limitadas as chamadas de progresso no Rust a 200ms ou 0,5% de variação, e no Kotlin os despachos de `startService` limitados estritamente a mudanças no percentual inteiro. Reduzida a sobrecarga na fila do Looper principal de 70.000 para ~100 chamadas.
+  2. **Ponte Atômica de Cancelamento**: Vinculado o método JNI `cancelBuild` ao flag do worker thread ativo via mutex `ACTIVE_CANCEL`, garantindo que o sinal de cancelamento interrompa imediatamente o loop Rust.
+  3. **Deleção Forçada de .part**: Remoção explícita de `part_path` no Rust ao cancelar e deleção imediata em background no Kotlin ao acionar `cancelBuild`, erradicando resquícios de arquivos temporários.
+  4. **Bumping de Versão**: Atualizado para SemVer `0.5.2` (versionCode 13).
+- **Evidência**: Testes Python validados e teste Rust `test_cancellation_deletes_part_file` adicionado.

@@ -8,7 +8,7 @@ mod tests;
 
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use jni::objects::{JClass, JObject, JString, JValue};
 use jni::sys::{jint, jstring};
 use jni::JNIEnv;
@@ -16,15 +16,19 @@ use jni::JNIEnv;
 use crate::discovery::{analyze_folder, discover, guess_title_id, PackerConfig};
 use crate::packer::build_nup;
 
-// Global cancellation flag for cooperative cancellation
-static CANCELLED: AtomicBool = AtomicBool::new(false);
+// Active cancellation flag bridge between JNI cancelBuild and the active build thread
+static ACTIVE_CANCEL: Mutex<Option<Arc<AtomicBool>>> = Mutex::new(None);
 
 #[no_mangle]
 pub extern "system" fn Java_com_nepo_nuppacker_RustBridge_cancelBuild(
     _env: JNIEnv,
     _class: JClass,
 ) {
-    CANCELLED.store(true, Ordering::SeqCst);
+    if let Ok(guard) = ACTIVE_CANCEL.lock() {
+        if let Some(ref flag) = *guard {
+            flag.store(true, Ordering::SeqCst);
+        }
+    }
 }
 
 #[no_mangle]
@@ -91,8 +95,10 @@ pub extern "system" fn Java_com_nepo_nuppacker_RustBridge_startBuild(
     json_config: JString,
     callback: JObject,
 ) -> jint {
-    CANCELLED.store(false, Ordering::SeqCst);
     let cancel_flag = Arc::new(AtomicBool::new(false));
+    if let Ok(mut guard) = ACTIVE_CANCEL.lock() {
+        *guard = Some(Arc::clone(&cancel_flag));
+    }
 
     let config_str: String = match env.get_string(&json_config) {
         Ok(s) => s.into(),
@@ -158,6 +164,10 @@ pub extern "system" fn Java_com_nepo_nuppacker_RustBridge_startBuild(
     let result = std::thread::spawn(move || {
         build_nup(&cfg, log_fn, prog_fn, cancel_check)
     }).join();
+
+    if let Ok(mut guard) = ACTIVE_CANCEL.lock() {
+        *guard = None;
+    }
 
     match result {
         Ok(Ok(out_path)) => {

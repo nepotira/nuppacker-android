@@ -45,6 +45,9 @@ class PackerForegroundService : Service() {
         }
 
         fun stopOrCancel(context: Context) {
+            if (RustBridge.isNativeEngineAvailable()) {
+                RustBridge.cancelBuild()
+            }
             PackerBridge.cancelActiveBuild()
             val intent = Intent(context, PackerForegroundService::class.java).apply {
                 action = ACTION_CANCEL
@@ -71,6 +74,9 @@ class PackerForegroundService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_CANCEL -> {
+                if (RustBridge.isNativeEngineAvailable()) {
+                    RustBridge.cancelBuild()
+                }
                 PackerBridge.cancelActiveBuild()
                 stopServiceGracefully()
             }
