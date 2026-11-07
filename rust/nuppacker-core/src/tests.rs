@@ -349,7 +349,7 @@ fn test_toc_parsing_and_navigation() {
     assert_eq!(get_str(dirs[3].0, dirs[3].1), "ui");
 
     // Verify Navigation: root (Dir 0) must contain exefs (Dir 1) and romfs (Dir 2)
-    let (root_no, root_nl, r_first, r_count) = dirs[0];
+    let (_root_no, _root_nl, r_first, r_count) = dirs[0];
     let root_children = &children[r_first..r_first + r_count];
     assert!(root_children.contains(&1), "Root dir must contain child Dir 1 (exefs)");
     assert!(root_children.contains(&2), "Root dir must contain child Dir 2 (romfs)");
