@@ -91,16 +91,44 @@ pub fn scan_dir(path: &Path, name: &str) -> Result<Dir, std::io::Error> {
     Ok(d)
 }
 
-/// Flattens the directory tree into indexed vectors of `Dir` and `FileEntry`.
-pub fn collect(d: &mut Dir, dirs: &mut Vec<Dir>, files: &mut Vec<FileEntry>) {
-    d.idx = dirs.len();
-    dirs.push(d.clone());
+/// Helper: assign in-place preorder indices to all Dir and FileEntry nodes
+fn assign_indices(
+    d: &mut Dir,
+    dir_idx: &mut usize,
+    file_idx: &mut usize,
+) {
+    d.idx = *dir_idx;
+    *dir_idx += 1;
+    for sub in &mut d.dirs {
+        assign_indices(sub, dir_idx, file_idx);
+    }
+    for f in &mut d.files {
+        f.idx = *file_idx;
+        *file_idx += 1;
+    }
+}
 
-    for sub_dir in &mut d.dirs {
-        collect(sub_dir, dirs, files);
+/// Helper: flatten fully indexed tree into flat vectors
+fn gather_flattened(
+    d: &Dir,
+    dirs: &mut Vec<Dir>,
+    files: &mut Vec<FileEntry>,
+) {
+    dirs.push(d.clone());
+    for sub in &d.dirs {
+        gather_flattened(sub, dirs, files);
     }
-    for file in &mut d.files {
-        file.idx = files.len();
-        files.push(file.clone());
+    for f in &d.files {
+        files.push(f.clone());
     }
+}
+
+/// Flattens the directory tree into indexed vectors of `Dir` and `FileEntry`.
+/// In-place two-pass algorithm guarantees that `d.dirs` and `d.files` inside
+/// the flattened `dirs` list preserve the true assigned indices of children.
+pub fn collect(d: &mut Dir, dirs: &mut Vec<Dir>, files: &mut Vec<FileEntry>) {
+    let mut dir_counter = dirs.len();
+    let mut file_counter = files.len();
+    assign_indices(d, &mut dir_counter, &mut file_counter);
+    gather_flattened(d, dirs, files);
 }

@@ -3,11 +3,17 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · Versiona
 
 ## [Unreleased]
 
-### Documentation
-- **Mandatory English-Primary Repository Standard**: Added bilingual language switcher to `README.md` (`[English](README.md) | [Português do Brasil](README.pt-BR.md)`) with updated v0.5.2 badges and architecture details.
-- **Portuguese Mirrored README**: Created `README.pt-BR.md` providing complete and localized documentation for Portuguese speakers.
-- **Agent Memory Setup**: Created `.agents/memory/` with `LESSONS.md`, `STATE.md`, and `HANDOFF.md`, documenting the mandatory international repository and bilingual release standard.
-- **GitHub Release Audit**: Retroactively updated all GitHub release titles and release notes to English-primary with Portuguese mirror sections.
+## [0.5.3] - 2026-11-07
+
+### Fixed
+- **Rust TOC Binary Layout & Spec Alignment**: Corrected the reserved `res2` field in `PKG_RECORD` from `0u64` (8 bytes) to `0u32` (4 bytes), strictly enforcing the 64-byte (`0x40`) specification size. Eliminates the 4-byte displacement that corrupted directory records, file records, and string pool offsets for emulators.
+- **Tree Traversal Indexing (Children Table Fix)**: Refactored `collect()` in `tree.rs` to use in-place preorder indexing prior to tree flattening. Eliminates zeroed `sub.idx` and `file.idx` values, restoring valid hierarchical navigation (`base -> exefs -> main.npdm`) and removing circular directory loops.
+- **Producer Compression Policy**: Aligned compression behavior with the official NUP specification producer policy, eliminating arbitrary extension bypasses and ensuring deterministic Zstd vs RAW decisions.
+- **Full TOC Verification Suite**: Added comprehensive end-to-end Table of Contents parser tests in both Rust (`test_toc_parsing_and_navigation`) and Python suites to safeguard binary layout integrity.
+
+### Added
+- **Engine Selector (Rust vs Python)**: Added an interactive engine selection card in the Android UI, allowing users to toggle between the high-performance native Rust core and the pure reference Python Chaquopy engine (from v0.1.1) at will.
+- **Bilingual Documentation & Memory Setup**: Sourced `README.pt-BR.md` localization mirror, added top language switcher to `README.md`, and established `.agents/memory/` persistent governance.
 
 ## [0.5.2] - 2026-11-07
 

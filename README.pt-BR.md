@@ -7,7 +7,7 @@ Aplicativo Android nativo de alta performance para empacotar dumps de Nintendo S
 Baseado em [PastaLaPate/NUPPacker](https://github.com/PastaLaPate/NUPPacker) e na [especificação de contêiner NUP](https://github.com/a55uka/nup).
 
 ![status](https://img.shields.io/badge/status-stable-brightgreen)
-![version](https://img.shields.io/badge/version-v0.5.2-blue)
+![version](https://img.shields.io/badge/version-v0.5.3-blue)
 ![license](https://img.shields.io/badge/license-AGPL--3.0-blue)
 ![platform](https://img.shields.io/badge/platform-Android%208.0+-green)
 

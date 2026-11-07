@@ -194,3 +194,15 @@ Cronológico, mais novo embaixo. Use o modelo da regra `30-documentacao`. Regist
   4. Adição de tópicos de busca ao repositório GitHub via `gh repo edit`.
   5. Auditoria e reescrita de todas as releases publicadas no GitHub (`v0.3.1` a `v0.5.2`) via `gh release edit`, padronizando títulos e notas principais em inglês com seção espelho em português ao final.
 - **Evidência**: Releases auditadas e editadas com sucesso; `README.md` e `README.pt-BR.md` sincronizados.
+
+## 2026-11-07 07:35 — Correção Estrutural do TOC Rust e Seletor de Motor no App (v0.5.3)
+- **Ramo**: `fix/19-fix-rust-toc-binary-layout-and-engine-selector`
+- **Contexto**: Relato do usuário de que os arquivos `.nup` gerados a partir da versão Rust não eram reconhecidos pelos emuladores de Switch 2 (ao contrário da versão original v0.1.1 em Python).
+- **Causas Identificadas e Corrigidas**:
+  1. **Desalinhamento de PKG Record**: Corrigido `res2` em `packer.rs` de `0u64` para `0u32`. Cada registro de pacote tem rigorosamente 64 bytes (`0x40`), cessando a defasagem de 4 bytes que destruía a leitura de diretórios, arquivos e string pool.
+  2. **Indexação da Árvore de Diretórios**: Corrigido `collect` em `tree.rs` com algoritmo de dois passos (indexação in-place antes de clonagem), garantindo que subdiretórios e arquivos recebam seus índices reais e eliminando o apontamento circular para o diretório raiz 0.
+  3. **Alinhamento com Política NUP**: Alinhada a tentativa de compressão Zstd com a especificação de referência NUP.
+  4. **Teste End-to-End de TOC**: Adicionados testes unitários rigorosos em Rust (`test_toc_parsing_and_navigation`) e Python validando a decodificação da TOC, offsets e navegação `base -> exefs -> main.npdm`.
+  5. **Seletor de Motor na UI**: Adicionado seletor tátil entre motor Rust Nativo e motor Python Original de Referência no Jetpack Compose.
+  6. **Bumping de Versão**: Atualizado para SemVer `0.5.3` (versionCode 14).
+- **Evidência**: 8 testes unitários Python validados e suite de validação de TOC implementada.

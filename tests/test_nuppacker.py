@@ -165,6 +165,90 @@ class TestNuppacker(unittest.TestCase):
             self.assertEqual(hdr_size, 0x80)
             self.assertEqual(hdr_ver, 1)
 
+    def test_toc_parsing_and_navigation(self):
+        base_dir = Path(self.test_dir) / "navdump" / "base"
+        (base_dir / "exefs").mkdir(parents=True)
+        (base_dir / "romfs" / "ui").mkdir(parents=True)
+        (base_dir / "exefs" / "main").write_bytes(b"MAIN_EXEC")
+        (base_dir / "exefs" / "main.npdm").write_bytes(b"META_HEADER")
+        (base_dir / "romfs" / "ui" / "icon.png").write_bytes(b"PNG_DATA")
+
+        out_nup = Path(self.test_dir) / "nav.nup"
+        cfg_dict = {
+            "folder": str(base_dir.parent),
+            "output": str(out_nup),
+            "title_id": "0100000000010000",
+            "zstd": 0,
+        }
+        build_nup(cfg_dict)
+
+        with open(out_nup, "rb") as f:
+            sb = f.read(0x80)
+            magic, hdr_sz, hdr_v, toc_off, toc_sz, toc_sha, blob_off, file_sz, p_cnt, res, uuid, pad = struct.unpack(
+                "<4sHHQQ32sQQII16s32s", sb
+            )
+            self.assertEqual(magic, b"NUP\x01")
+            self.assertEqual(hdr_sz, 0x80)
+            self.assertEqual(hdr_v, 1)
+
+            f.seek(toc_off)
+            toc = f.read(toc_sz)
+            self.assertEqual(hashlib.sha256(toc).digest(), toc_sha)
+
+            t_magic, P, D, F, pool_off, pool_len, t_res = struct.unpack_from("<IIQQQQQ", toc, 0)
+            self.assertEqual(t_magic, 0x01434F54)
+            self.assertEqual((P, D, F), (1, 4, 3))
+
+            off = 0x30
+            PKG_S = struct.Struct("<QIIIIBBHIQI20s")
+            self.assertEqual(PKG_S.size, 0x40)
+            tid, root, exefs, romfs, ver, kind, flags, r1, r2, m_off, m_len, p_pad = PKG_S.unpack_from(toc, off)
+            self.assertEqual(root, 0)
+            self.assertEqual(exefs, 1)
+            self.assertEqual(romfs, 2)
+            self.assertEqual(r1, 0)
+            self.assertEqual(r2, 0)
+            off += P * 0x40
+
+            DIR_S = struct.Struct("<IIIIQ")
+            self.assertEqual(DIR_S.size, 0x18)
+            dirs = []
+            for _ in range(D):
+                no, nl, first, count, r = DIR_S.unpack_from(toc, off)
+                dirs.append((no, nl, first, count))
+                off += 0x18
+
+            FILE_S = struct.Struct("<IIQQQ32sBBH12s")
+            self.assertEqual(FILE_S.size, 0x50)
+            files = []
+            for _ in range(F):
+                no, nl, sz, eoff, esz, sha, codec, flags, r, f_pad = FILE_S.unpack_from(toc, off)
+                files.append((no, nl, sz, eoff, esz, sha, codec))
+                off += 0x50
+
+            total_children = sum(c for _, _, _, c in dirs)
+            children = struct.unpack_from(f"<{total_children}I", toc, off)
+            self.assertEqual(off + total_children * 4, pool_off)
+
+            pool = toc[pool_off : pool_off + pool_len]
+            def get_str(no, nl):
+                return pool[no : no + nl].decode("utf-8")
+
+            # Check navigation
+            root_no, root_nl, r_first, r_count = dirs[0]
+            self.assertEqual(get_str(root_no, root_nl), "base")
+            root_children = children[r_first : r_first + r_count]
+            self.assertIn(1, root_children) # exefs
+            self.assertIn(2, root_children) # romfs
+            self.assertNotIn(0, root_children) # no circular reference
+
+            exefs_no, exefs_nl, e_first, e_count = dirs[1]
+            self.assertEqual(get_str(exefs_no, exefs_nl), "exefs")
+            exefs_children = children[e_first : e_first + e_count]
+            exefs_file_names = [get_str(files[c - D][0], files[c - D][1]) for c in exefs_children if c >= D]
+            self.assertIn("main", exefs_file_names)
+            self.assertIn("main.npdm", exefs_file_names)
+
     def test_cancellation(self):
         base_dir = Path(self.test_dir) / "canceldump" / "base"
         (base_dir / "exefs").mkdir(parents=True)
