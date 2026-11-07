@@ -173,3 +173,42 @@ fn test_small_file_raw_fallback_and_compression() {
     assert!(res.is_ok(), "Build failed: {:?}", res.err());
     assert!(out_nup.exists());
 }
+
+#[test]
+fn test_cancellation_deletes_part_file() {
+    let temp_dir = TempDir::new().unwrap();
+    let dump = temp_dir.path().join("dump");
+    let exefs = dump.join("exefs");
+    let romfs = dump.join("romfs");
+    fs::create_dir_all(&exefs).unwrap();
+    fs::create_dir_all(&romfs).unwrap();
+
+    fs::write(exefs.join("main"), b"MAIN_EXEC").unwrap();
+    fs::write(romfs.join("data.bin"), vec![0xAA; 1024 * 1024]).unwrap();
+
+    let out_nup = temp_dir.path().join("cancelled_game.nup");
+    let part_path = temp_dir.path().join("cancelled_game.nup.part");
+
+    let cfg = PackerConfig {
+        folder: dump.to_string_lossy().to_string(),
+        update: None,
+        dlc: None,
+        output: out_nup.to_string_lossy().to_string(),
+        title_id: "0100000000010000".to_string(),
+        title: Some("CancelTest".to_string()),
+        publisher: None,
+        version: Some("1.0.0".to_string()),
+        update_version: None,
+        display_version: None,
+        nacp: None,
+        icon: None,
+        zstd: Some(3),
+        loc_titles: None,
+    };
+
+    let cancelled = Arc::new(AtomicBool::new(true)); // Pre-cancelled
+    let res = build_nup(&cfg, |_| {}, |_| {}, cancelled);
+    assert!(res.is_err(), "Expected build to fail due to cancellation");
+    assert!(!out_nup.exists(), "Final .nup should not exist when cancelled");
+    assert!(!part_path.exists(), ".part file must be deleted when cancelled");
+}

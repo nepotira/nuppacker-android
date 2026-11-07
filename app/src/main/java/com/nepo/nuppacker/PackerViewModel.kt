@@ -484,6 +484,16 @@ class PackerViewModel : ViewModel() {
         PackerForegroundService.stopOrCancel(context)
         isPacking = false
         statusMessage = "Build cancelled by user."
+
+        val targetPath = outputPath
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val partFile = File("$targetPath.part")
+                if (partFile.exists()) {
+                    partFile.delete()
+                }
+            } catch (_: Exception) {}
+        }
     }
 
     fun startBuild(context: Context) {
@@ -529,6 +539,8 @@ class PackerViewModel : ViewModel() {
         // Start Foreground Service with persistent notification
         PackerForegroundService.startService(context, jsonPayload, displayName)
 
+        var lastReportedPercent = -1
+
         viewModelScope.launch(Dispatchers.IO) {
             if (isNative) {
                 val rustCallback = object : RustCallback {
@@ -542,13 +554,16 @@ class PackerViewModel : ViewModel() {
                         viewModelScope.launch(Dispatchers.Main) {
                             progress = ratio.coerceIn(0f, 1f)
                             val percent = (progress * 100).toInt()
-                            val updateIntent = Intent(context, PackerForegroundService::class.java).apply {
-                                action = PackerForegroundService.ACTION_UPDATE_PROGRESS
-                                putExtra(PackerForegroundService.EXTRA_TITLE_NAME, displayName)
-                                putExtra(PackerForegroundService.EXTRA_PROGRESS, percent)
-                                putExtra(PackerForegroundService.EXTRA_STATUS, "Packing files ($percent%)...")
+                            if (percent != lastReportedPercent) {
+                                lastReportedPercent = percent
+                                val updateIntent = Intent(context, PackerForegroundService::class.java).apply {
+                                    action = PackerForegroundService.ACTION_UPDATE_PROGRESS
+                                    putExtra(PackerForegroundService.EXTRA_TITLE_NAME, displayName)
+                                    putExtra(PackerForegroundService.EXTRA_PROGRESS, percent)
+                                    putExtra(PackerForegroundService.EXTRA_STATUS, "Packing files ($percent%)...")
+                                }
+                                context.startService(updateIntent)
                             }
-                            context.startService(updateIntent)
                         }
                     }
 
@@ -570,6 +585,14 @@ class PackerViewModel : ViewModel() {
                             statusMessage = "Build cancelled."
                             addLog("Operation aborted by user. Temporary files cleaned.")
                             PackerForegroundService.stopOrCancel(context)
+                            viewModelScope.launch(Dispatchers.IO) {
+                                try {
+                                    val partFile = File("$outputPath.part")
+                                    if (partFile.exists()) {
+                                        partFile.delete()
+                                    }
+                                } catch (_: Exception) {}
+                            }
                         }
                     }
 
@@ -579,6 +602,14 @@ class PackerViewModel : ViewModel() {
                             statusMessage = "Error: $error"
                             addLog("ERROR: $error")
                             PackerForegroundService.stopOrCancel(context)
+                            viewModelScope.launch(Dispatchers.IO) {
+                                try {
+                                    val partFile = File("$outputPath.part")
+                                    if (partFile.exists()) {
+                                        partFile.delete()
+                                    }
+                                } catch (_: Exception) {}
+                            }
                         }
                     }
                 }
@@ -595,13 +626,16 @@ class PackerViewModel : ViewModel() {
                         viewModelScope.launch(Dispatchers.Main) {
                             progress = ratio.coerceIn(0f, 1f)
                             val percent = (progress * 100).toInt()
-                            val updateIntent = Intent(context, PackerForegroundService::class.java).apply {
-                                action = PackerForegroundService.ACTION_UPDATE_PROGRESS
-                                putExtra(PackerForegroundService.EXTRA_TITLE_NAME, displayName)
-                                putExtra(PackerForegroundService.EXTRA_PROGRESS, percent)
-                                putExtra(PackerForegroundService.EXTRA_STATUS, "Packing files ($percent%)...")
+                            if (percent != lastReportedPercent) {
+                                lastReportedPercent = percent
+                                val updateIntent = Intent(context, PackerForegroundService::class.java).apply {
+                                    action = PackerForegroundService.ACTION_UPDATE_PROGRESS
+                                    putExtra(PackerForegroundService.EXTRA_TITLE_NAME, displayName)
+                                    putExtra(PackerForegroundService.EXTRA_PROGRESS, percent)
+                                    putExtra(PackerForegroundService.EXTRA_STATUS, "Packing files ($percent%)...")
+                                }
+                                context.startService(updateIntent)
                             }
-                            context.startService(updateIntent)
                         }
                     }
 

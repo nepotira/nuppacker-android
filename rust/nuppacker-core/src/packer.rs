@@ -201,6 +201,9 @@ where
         const MEM_THRESHOLD: u64 = 4 * 1024 * 1024; // 4 MB fast-path memory buffer
         let mut mem_file_buf = Vec::with_capacity(MEM_THRESHOLD as usize);
 
+        let mut last_progress_ratio: f32 = 0.0;
+        let mut last_progress_time = std::time::Instant::now();
+
         for f in &mut files {
             if cancelled.load(Ordering::Relaxed) {
                 return Err("Cancelled by user".into());
@@ -389,8 +392,15 @@ where
                 pos = start + f.esize;
             }
 
-            progress((done as f32) / (total_bytes as f32));
+            let current_ratio = ((done as f64) / (total_bytes as f64)) as f32;
+            if (current_ratio - last_progress_ratio).abs() >= 0.005 || last_progress_time.elapsed().as_millis() >= 200 {
+                progress(current_ratio);
+                last_progress_ratio = current_ratio;
+                last_progress_time = std::time::Instant::now();
+            }
         }
+
+        progress(1.0);
 
         let file_size = pos;
 

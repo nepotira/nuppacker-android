@@ -3,6 +3,13 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · Versiona
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-11-07
+
+### Fixed
+- **UI Freeze on Large Builds (JNI & IPC Rate Limiting)**: Resolved total application freeze and touch gesture drops during packing by rate-limiting Rust progress callbacks to 200ms/0.5% increments and throttling Android `startService` notification updates to integer percent changes only.
+- **Atomic Cancellation Synchronization**: Connected `RustBridge.cancelBuild()` directly to the active build worker thread via thread-safe `ACTIVE_CANCEL` mutex bridge, ensuring cancellation signals are immediately processed by the Rust native engine.
+- **Guaranteed .nup.part Cleanup on Cancellation**: Ensured `.part` temporary files are removed immediately from disk both in Rust upon detecting cancellation and in Kotlin via background I/O fallback, leaving no leftover files.
+
 ## [0.5.1] - 2026-11-06
 
 ### Fixed
