@@ -19,10 +19,10 @@ Empacotar e gerenciar dumps de Switch 1/2 no formato `.nup` diretamente no Andro
 | Motor Rust Nativo (`nuppacker-core`) | Funciona | 2026-11-07 / 0.5.3 | `cargo test` no CI (10 testes OK incluindo validação completa de TOC) |
 | JNI Bridge (`RustBridge.kt`) | Integrado | 2026-11-07 / 0.5.3 | Ponte JNI com `ACTIVE_CANCEL`, cancelamento atômico e detecção NPDM |
 | Interface Compose + Chaquopy/Rust | Integrado | 2026-11-07 / 0.5.3 | UI fluida a 60/120 Hz, com seletor de motor (Rust vs Python) |
-| Compilação do APK no GitHub Actions | Funciona | 2026-11-07 / 0.5.2 | GitHub Actions Run #42359474318 (Release v0.5.2 publicada) |
-| Foreground Service & Notificação | Integrado | 2026-11-07 / 0.5.2 | `PackerForegroundService` com throttling de intents inteiros |
-| Estimativa Instantânea & StatFs | Funciona | 2026-11-07 / 0.5.2 | Varredura nativa direta em Rust e StatFs fora da thread de UI |
-| Documentação Bilíngue (EN/pt-BR) | Funciona | 2026-11-07 / 0.5.2 | README.md com seletor de idiomas, README.pt-BR.md espelhado e releases bilíngues |
+| Compilação do APK no GitHub Actions | Funciona | 2026-11-07 / 0.5.3 | GitHub Actions Run #42364909056 (Release v0.5.3 publicada) |
+| Foreground Service & Notificação | Integrado | 2026-11-07 / 0.5.3 | `PackerForegroundService` com throttling de intents inteiros |
+| Estimativa Instantânea & StatFs | Funciona | 2026-11-07 / 0.5.3 | Varredura nativa direta em Rust e StatFs fora da thread de UI |
+| Documentação Bilíngue (EN/pt-BR) | Funciona | 2026-11-07 / 0.5.3 | README.md com seletor de idiomas, README.pt-BR.md espelhado e releases bilíngues |
 | Teste em dispositivo Android físico | Não testado | — | Aguardando teste de usuário da v0.5.3 |
 
 ## Concluído
@@ -34,7 +34,7 @@ Empacotar e gerenciar dumps de Switch 1/2 no formato `.nup` diretamente no Andro
 - [x] Correção do slider Zstandard (desacoplamento tátil e `roundToInt`).
 - [x] Fim do congelamento da interface por inundação de chamadas JNI e IPC intents.
 - [x] Sincronização real de cancelamento e deleção garantida de `.nup.part`.
-- [x] Compilação multi-ABI com `cargo-ndk` e publicação da release `v0.5.2`.
+- [x] Compilação multi-ABI com `cargo-ndk` e publicação da release `v0.5.3`.
 - [x] Padrão internacional de idioma aplicado: README.md primário em inglês, espelho README.pt-BR.md e releases auditadas com inglês primário.
 - [x] Correção binária do TOC em Rust (PKG 64 bytes e indexação da árvore de diretórios).
 - [x] Adição do seletor de motor na interface (Rust Nativo vs Python v0.1.1).
