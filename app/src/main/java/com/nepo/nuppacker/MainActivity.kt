@@ -445,6 +445,45 @@ fun NUPPackerScreen(viewModel: PackerViewModel = viewModel()) {
                 }
             }
 
+            // Engine Selector Card
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        "Packaging Engine",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        FilterChip(
+                            selected = viewModel.selectedEngine == PackerViewModel.EngineType.RUST,
+                            onClick = { viewModel.updateSelectedEngine(PackerViewModel.EngineType.RUST) },
+                            label = { Text("Rust Native (Fast)") },
+                            modifier = Modifier.weight(1f)
+                        )
+                        FilterChip(
+                            selected = viewModel.selectedEngine == PackerViewModel.EngineType.PYTHON,
+                            onClick = { viewModel.updateSelectedEngine(PackerViewModel.EngineType.PYTHON) },
+                            label = { Text("Python (v0.1.1 Ref)") },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        if (viewModel.selectedEngine == PackerViewModel.EngineType.RUST) {
+                            "Rust Core: High-performance engine with ARMv8 hardware SHA-256 and multithreaded zstd."
+                        } else {
+                            "Python Engine: Pure Chaquopy runtime with exact reference logic from v0.1.1."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
             // Advanced Options (Expandable)
             OutlinedCard(
                 onClick = { showAdvanced = !showAdvanced },

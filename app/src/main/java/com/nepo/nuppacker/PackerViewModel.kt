@@ -60,6 +60,19 @@ class PackerViewModel : ViewModel() {
     var locTitles by mutableStateOf("")
         private set
 
+    enum class EngineType {
+        RUST,
+        PYTHON
+    }
+
+    var selectedEngine by mutableStateOf(EngineType.RUST)
+        private set
+
+    fun updateSelectedEngine(engine: EngineType) {
+        selectedEngine = engine
+        addLog("Selected engine: ${if (engine == EngineType.RUST) "Rust Native Core (High Performance)" else "Python Engine (Reference Compatibility v0.1.1)"}")
+    }
+
     var isPacking by mutableStateOf(false)
         private set
     var progress by mutableFloatStateOf(0f)
@@ -531,7 +544,7 @@ class PackerViewModel : ViewModel() {
         isPacking = true
         progress = 0f
         statusMessage = "Packing in progress..."
-        val isNative = RustBridge.isNativeEngineAvailable()
+        val isNative = RustBridge.isNativeEngineAvailable() && selectedEngine == EngineType.RUST
         addLog(if (isNative) "=== Starting NUP Build (Native Rust Core / ARMv8 Hardware Crypto) ===" else "=== Starting NUP Build (Python Engine) ===")
         addLog("Target output: $outputPath")
         addLog("Title ID: $titleId | zstd level: $zstdLevel")

@@ -219,7 +219,7 @@ where
             }
 
             let before = pos;
-            let pad = ((!pos + 1) & 15) as usize % 16;
+            let pad = (align16(pos) - pos) as usize;
             if pad > 0 {
                 out.write_all(&vec![0u8; pad])
                     .map_err(|e| format!("Failed writing padding: {}", e))?;
@@ -227,7 +227,7 @@ where
             }
             let start = pos;
 
-            let mut skip_compression = zstd_level == 0 || is_incompressible_ext(Path::new(&f.name));
+            let skip_compression = zstd_level == 0;
 
             if f.size <= MEM_THRESHOLD {
                 // ========================================================
@@ -240,13 +240,6 @@ where
                 fin.read_to_end(&mut mem_file_buf).map_err(|e| format!("Failed reading {}: {}", f.name, e))?;
 
                 f.sha = Sha256::digest(&mem_file_buf).into();
-
-                if !skip_compression && mem_file_buf.len() > (128 * 1024) {
-                    let probe_len = std::cmp::min(16 * 1024, mem_file_buf.len());
-                    if probe_len >= 4096 && fast_entropy_probe(&mem_file_buf[..probe_len]) > 7.75 {
-                        skip_compression = true;
-                    }
-                }
 
                 let mut stored_raw = true;
                 if !skip_compression {
@@ -285,17 +278,6 @@ where
                             f.size as libc::off_t,
                             libc::POSIX_FADV_SEQUENTIAL | libc::POSIX_FADV_WILLNEED,
                         );
-                    }
-                }
-
-                if !skip_compression {
-                    if let Ok(mut probe_file) = File::open(&f.path) {
-                        let mut probe_buf = vec![0u8; 16 * 1024];
-                        if let Ok(n) = probe_file.read(&mut probe_buf) {
-                            if n >= 4096 && fast_entropy_probe(&probe_buf[..n]) > 7.75 {
-                                skip_compression = true;
-                            }
-                        }
                     }
                 }
 
@@ -418,6 +400,7 @@ where
 
         // 2. PKG Records (0x40 bytes each)
         for p in &pkgs {
+            let pkg_start = toc_bytes.len();
             toc_bytes.extend_from_slice(&p.title_id.to_le_bytes());
             toc_bytes.extend_from_slice(&(p.root.idx as u32).to_le_bytes());
             toc_bytes.extend_from_slice(&p.exefs_idx.to_le_bytes());
@@ -425,25 +408,29 @@ where
             toc_bytes.extend_from_slice(&p.version.to_le_bytes());
             toc_bytes.push(p.kind);
             toc_bytes.push(p.flags);
-            toc_bytes.extend_from_slice(&0u16.to_le_bytes());
-            toc_bytes.extend_from_slice(&0u64.to_le_bytes());
+            toc_bytes.extend_from_slice(&0u16.to_le_bytes()); // reserved 1 (2 bytes)
+            toc_bytes.extend_from_slice(&0u32.to_le_bytes()); // reserved 2 (4 bytes, uint32 per NUP spec)
             toc_bytes.extend_from_slice(&p.meta_off.to_le_bytes());
             toc_bytes.extend_from_slice(&(p.meta.len() as u32).to_le_bytes());
-            toc_bytes.extend_from_slice(&[0u8; 20]);
+            toc_bytes.extend_from_slice(&[0u8; 20]); // reserved 3 (20 bytes)
+            assert_eq!(toc_bytes.len() - pkg_start, PKG_RECORD_SIZE);
         }
 
         // 3. DIR Records (0x18 bytes each)
         for d in &dirs {
+            let dir_start = toc_bytes.len();
             let (no, nl) = pmap[&d.name];
             toc_bytes.extend_from_slice(&no.to_le_bytes());
             toc_bytes.extend_from_slice(&nl.to_le_bytes());
             toc_bytes.extend_from_slice(&(d.first as u32).to_le_bytes());
             toc_bytes.extend_from_slice(&(d.count as u32).to_le_bytes());
             toc_bytes.extend_from_slice(&0u64.to_le_bytes());
+            assert_eq!(toc_bytes.len() - dir_start, DIR_RECORD_SIZE);
         }
 
         // 4. FILE Records (0x50 bytes each)
         for f in &files {
+            let file_start = toc_bytes.len();
             let (no, nl) = pmap[&f.name];
             toc_bytes.extend_from_slice(&no.to_le_bytes());
             toc_bytes.extend_from_slice(&nl.to_le_bytes());
@@ -455,12 +442,16 @@ where
             toc_bytes.push(0u8); // flags
             toc_bytes.extend_from_slice(&0u16.to_le_bytes());
             toc_bytes.extend_from_slice(&[0u8; 12]);
+            assert_eq!(toc_bytes.len() - file_start, FILE_RECORD_SIZE);
         }
 
         // 5. Children Array (uint32 each)
         for c in &children {
             toc_bytes.extend_from_slice(&c.to_le_bytes());
         }
+
+        // Validate that children table ends at exact pool_off offset
+        assert_eq!(toc_bytes.len() as u64, pool_off);
 
         // 6. Name string pool
         toc_bytes.extend_from_slice(&pool);
