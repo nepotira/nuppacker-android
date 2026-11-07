@@ -183,3 +183,14 @@ Cronológico, mais novo embaixo. Use o modelo da regra `30-documentacao`. Regist
   3. **Deleção Forçada de .part**: Remoção explícita de `part_path` no Rust ao cancelar e deleção imediata em background no Kotlin ao acionar `cancelBuild`, erradicando resquícios de arquivos temporários.
   4. **Bumping de Versão**: Atualizado para SemVer `0.5.2` (versionCode 13).
 - **Evidência**: Testes Python validados e teste Rust `test_cancellation_deletes_part_file` adicionado.
+
+## 2026-11-07 06:36 — Padrão Mandatório de Repositórios e Releases em Inglês com Espelho em Português
+- **Ramo**: `docs/18-i18n-english-primary-and-memory-lessons`
+- **Contexto**: Correção do usuário sobre o idioma do repositório, exigindo inglês primário como padrão internacional para código aberto com espelho em português (`README.pt-BR.md`), seletor de idiomas no topo e releases bilingues com corpo em inglês primário.
+- **Ações**:
+  1. Criação da pasta `.agents/memory/` contendo `LESSONS.md`, `STATE.md` e `HANDOFF.md`, formalizando a lição aprendida.
+  2. Atualização do `README.md` com links de navegação `[English](README.md) | [Português do Brasil](README.pt-BR.md)`, badges atualizadas da `v0.5.2` e descrição da arquitetura Rust.
+  3. Criação de `README.pt-BR.md` com a versão espelho completa e revisada em português do Brasil.
+  4. Adição de tópicos de busca ao repositório GitHub via `gh repo edit`.
+  5. Auditoria e reescrita de todas as releases publicadas no GitHub (`v0.3.1` a `v0.5.2`) via `gh release edit`, padronizando títulos e notas principais em inglês com seção espelho em português ao final.
+- **Evidência**: Releases auditadas e editadas com sucesso; `README.md` e `README.pt-BR.md` sincronizados.

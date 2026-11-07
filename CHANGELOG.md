@@ -3,6 +3,12 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) · Versiona
 
 ## [Unreleased]
 
+### Documentation
+- **Mandatory English-Primary Repository Standard**: Added bilingual language switcher to `README.md` (`[English](README.md) | [Português do Brasil](README.pt-BR.md)`) with updated v0.5.2 badges and architecture details.
+- **Portuguese Mirrored README**: Created `README.pt-BR.md` providing complete and localized documentation for Portuguese speakers.
+- **Agent Memory Setup**: Created `.agents/memory/` with `LESSONS.md`, `STATE.md`, and `HANDOFF.md`, documenting the mandatory international repository and bilingual release standard.
+- **GitHub Release Audit**: Retroactively updated all GitHub release titles and release notes to English-primary with Portuguese mirror sections.
+
 ## [0.5.2] - 2026-11-07
 
 ### Fixed

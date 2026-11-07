@@ -22,6 +22,7 @@ Empacotar e gerenciar dumps de Switch 1/2 no formato `.nup` diretamente no Andro
 | Compilação do APK no GitHub Actions | Funciona | 2026-11-07 / 0.5.2 | GitHub Actions Run #42359474318 (Release v0.5.2 publicada) |
 | Foreground Service & Notificação | Integrado | 2026-11-07 / 0.5.2 | `PackerForegroundService` com throttling de intents inteiros |
 | Estimativa Instantânea & StatFs | Funciona | 2026-11-07 / 0.5.2 | Varredura nativa direta em Rust e StatFs fora da thread de UI |
+| Documentação Bilíngue (EN/pt-BR) | Funciona | 2026-11-07 / 0.5.2 | README.md com seletor de idiomas, README.pt-BR.md espelhado e releases bilíngues |
 | Teste em dispositivo Android físico | Não testado | — | Aguardando teste de usuário da v0.5.2 |
 
 ## Concluído
@@ -34,6 +35,7 @@ Empacotar e gerenciar dumps de Switch 1/2 no formato `.nup` diretamente no Andro
 - [x] Fim do congelamento da interface por inundação de chamadas JNI e IPC intents.
 - [x] Sincronização real de cancelamento e deleção garantida de `.nup.part`.
 - [x] Compilação multi-ABI com `cargo-ndk` e publicação da release `v0.5.2`.
+- [x] Padrão internacional de idioma aplicado: README.md primário em inglês, espelho README.pt-BR.md e releases auditadas com inglês primário.
 
 ## Próximos passos (ordem de prioridade)
 1. Realizar testes no dispositivo físico com a versão `v0.5.2` (verificar responsividade da UI durante o empacotamento do Mario Kart e se o `.part` some ao cancelar).
